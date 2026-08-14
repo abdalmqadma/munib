@@ -6,6 +6,8 @@ import '../../data/services/ocr_service.dart';
 import '../../data/services/ai_service.dart';
 import 'review_screen.dart';
 import 'dart:io';
+import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -36,9 +38,9 @@ class _UploadScreenState extends State<UploadScreen> {
     // رفع الجودة قليلاً لضمان وضوح الأرقام للـ AI
     final image = await picker.pickImage(
       source: source,
-      maxWidth: 1600, 
-      maxHeight: 1600,
-      imageQuality: 90,
+      maxWidth: 800, // تقليل العرض لسهولة النقل عبر المحاكي
+      maxHeight: 800,
+      imageQuality: 70, // تقليل الجودة لضمان عبورها من الشبكة
     );
     if (image != null) _processFile(image);
   }
@@ -50,19 +52,28 @@ class _UploadScreenState extends State<UploadScreen> {
     });
 
     try {
+      File fileToProcess = File(file.path);
+      
+      // ضغط الصورة إذا لزم الأمر قبل إرسالها لـ Groq
+      if (!file.path.toLowerCase().endsWith('.pdf')) {
+        fileToProcess = await _compressImageIfNeeded(fileToProcess);
+      }
+
       await Future.delayed(const Duration(milliseconds: 800));
       setState(() => _loadingStep = 2);
       
       List<Map<String, dynamic>> structuredData;
       
       if (file.path.toLowerCase().endsWith('.pdf')) {
-        final text = await _ocrService.extractText(file);
+        final text = await _ocrService.extractText(XFile(fileToProcess.path));
         setState(() => _loadingStep = 3);
         structuredData = await _aiService.structurePrayerTimes(text);
       } else {
         await Future.delayed(const Duration(milliseconds: 500));
         setState(() => _loadingStep = 3);
-        structuredData = await _aiService.structurePrayerTimesFromImage(File(file.path));
+        // التعديل هنا: استخدام الملف المكبوس بدلاً من fileToProcess القديم
+        final compressedFile = await _compressImageIfNeeded(fileToProcess);
+        structuredData = await _aiService.structurePrayerTimesFromImage(compressedFile);
       }
       
       setState(() => _loadingStep = 4);
@@ -85,6 +96,44 @@ class _UploadScreenState extends State<UploadScreen> {
     } finally {
       if (mounted && !_hasError) setState(() => _isLoading = false);
     }
+  }
+
+  Future<File> _compressImageIfNeeded(File original) async {
+    final sizeInBytes = await original.length();
+    const maxAllowedBytes = 3 * 1024 * 1024; // هامش أمان تحت حد الـ 4MB
+
+    if (sizeInBytes <= maxAllowedBytes) return original;
+
+    print("Compressing image... current size: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(2)} MB");
+
+    final bytes = await original.readAsBytes();
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return original;
+
+    img.Image resized = decoded;
+    if (decoded.width > 1600 || decoded.height > 1600) {
+      resized = img.copyResize(
+        decoded,
+        width: decoded.width >= decoded.height ? 1600 : null,
+        height: decoded.height > decoded.width ? 1600 : null,
+      );
+    }
+
+    int quality = 85;
+    List<int> outputBytes = img.encodeJpg(resized, quality: quality);
+    while (outputBytes.length > maxAllowedBytes && quality > 30) {
+      quality -= 10;
+      outputBytes = img.encodeJpg(resized, quality: quality);
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final compressedFile = File(
+      '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    );
+    await compressedFile.writeAsBytes(outputBytes);
+    
+    print("New size: ${(outputBytes.length / (1024 * 1024)).toStringAsFixed(2)} MB");
+    return compressedFile;
   }
 
   bool _hasError = false;
