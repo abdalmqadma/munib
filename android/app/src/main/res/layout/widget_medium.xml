@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_isha"
+    android:padding="15dp">
+
+    <!-- Top Row: Title and Weather Icon -->
+    <LinearLayout
+        android:id="@+id/top_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/widget_next_prayer"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ASR"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold" />
+            <TextView
+                android:id="@+id/widget_time_left"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="01:09:03"
+                android:textColor="#FFFFD166"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/widget_bg_icon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@drawable/ic_sun"
+            android:alpha="0.5" />
+    </LinearLayout>
+
+    <!-- Center Section: Random Dhikr (Fills empty space) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@id/top_row"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/widget_pill_bg"
+        android:padding="8dp"
+        android:gravity="center">
+        <TextView
+            android:id="@+id/widget_dhikr"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="سبحان الله وبحمده"
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="serif"
+            android:gravity="center" />
+    </LinearLayout>
+
+    <!-- Bottom Row: Other Prayers -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:gravity="center">
+        <TextView
+            android:id="@+id/p1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="الظهر 12:15"
+            android:textColor="#60FFFFFF"
+            android:textSize="10sp"
+            android:gravity="center" />
+        <TextView
+            android:id="@+id/p2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="المغرب 18:40"
+            android:textColor="#60FFFFFF"
+            android:textSize="10sp"
+            android:gravity="center" />
+        <TextView
+            android:id="@+id/p3"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="العشاء 20:05"
+            android:textColor="#60FFFFFF"
+            android:textSize="10sp"
+            android:gravity="center" />
+    </LinearLayout>
+
+</RelativeLayout>
