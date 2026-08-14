@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "372276574383",
+    "project_id": "munib-f5102",
+    "storage_bucket": "munib-f5102.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:372276574383:android:6ea6f89d718cd3b127fc5a",
+        "android_client_info": {
+          "package_name": "com.example.munib"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "372276574383-fnk40h3lpiedamnggb81tb52j0r2vqkc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.munib",
+            "certificate_hash": "2000514772eeea1fea4751b2945ae6c34a152b8d"
+          }
+        },
+        {
+          "client_id": "372276574383-um671tah7nqjsgplvbl8sp9ua7vsaf7a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGs_F86tpTNbXyjTGUuNERQTZuvCWo_cg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "372276574383-um671tah7nqjsgplvbl8sp9ua7vsaf7a.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "372276574383-bc9ba2u4lon70tu4mrp6lorkgp8cm101.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.munib"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
