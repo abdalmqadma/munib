@@ -12,6 +12,8 @@ import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+// اختبار الكتابة المباشرة من ChatGPT إلى مستودع منيب
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
