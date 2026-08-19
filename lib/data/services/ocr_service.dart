@@ -1,17 +1,106 @@
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'dart:io';
+
+import 'package:flutter_tesseract_ocr/flutter_tesseract_ocr.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:pdfx/pdfx.dart';
+
+import 'image_preprocessor.dart';
 
 class OCRService {
-  // Use Latin script as default. Arabic script often requires a separate package or specific model.
-  final TextRecognizer _textRecognizer = TextRecognizer(script: TextRecognitionScript.latin);
+  static const _languages = 'ara+eng';
+  static const _trainedDataBaseUrl =
+      'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
+
+  final ImagePreprocessor _preprocessor = ImagePreprocessor();
 
   Future<String> extractText(XFile image) async {
-    final inputImage = InputImage.fromFilePath(image.path);
-    final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
-    return recognizedText.text;
+    final prepared = await _preprocessor.prepareForOcr(File(image.path));
+    await _ensureTrainedData();
+
+    return FlutterTesseractOcr.extractText(
+      prepared.path,
+      language: _languages,
+      args: const {
+        'psm': '6',
+        'preserve_interword_spaces': '1',
+      },
+    );
   }
 
-  void dispose() {
-    _textRecognizer.close();
+  Future<String> extractTextFromPdf(File pdfFile) async {
+    await _ensureTrainedData();
+
+    final document = await PdfDocument.openFile(pdfFile.path);
+    final chunks = <String>[];
+
+    try {
+      for (var pageNumber = 1; pageNumber <= document.pagesCount; pageNumber++) {
+        final page = await document.getPage(pageNumber);
+        try {
+          final rendered = await page.render(
+            width: (page.width * 2).round(),
+            height: (page.height * 2).round(),
+            format: PdfPageImageFormat.jpeg,
+            backgroundColor: '#ffffff',
+          );
+
+          if (rendered == null) continue;
+
+          final tempDir = await getTemporaryDirectory();
+          final imageFile = File(
+            '${tempDir.path}/munib_pdf_${DateTime.now().microsecondsSinceEpoch}_$pageNumber.jpg',
+          );
+          await imageFile.writeAsBytes(rendered.bytes);
+
+          try {
+            final prepared = await _preprocessor.prepareForOcr(imageFile);
+            final text = await FlutterTesseractOcr.extractText(
+              prepared.path,
+              language: _languages,
+              args: const {
+                'psm': '6',
+                'preserve_interword_spaces': '1',
+              },
+            );
+            if (text.trim().isNotEmpty) {
+              chunks.add(text);
+            }
+          } finally {
+            if (await imageFile.exists()) await imageFile.delete();
+          }
+        } finally {
+          await page.close();
+        }
+      }
+    } finally {
+      await document.close();
+    }
+
+    return chunks.join('\n\n');
+  }
+
+  Future<void> _ensureTrainedData() async {
+    final tessDataPath = await FlutterTesseractOcr.getTessdataPath();
+    final directory = Directory(tessDataPath);
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+
+    for (final language in const ['ara', 'eng']) {
+      final target = File('$tessDataPath/$language.traineddata');
+      if (await target.exists() && await target.length() > 0) continue;
+
+      final response = await http.get(
+        Uri.parse('$_trainedDataBaseUrl/$language.traineddata'),
+      );
+
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
+        throw Exception('Unable to download $language OCR model.');
+      }
+
+      await target.writeAsBytes(response.bodyBytes, flush: true);
+    }
   }
 }
