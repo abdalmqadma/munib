@@ -9,23 +9,44 @@ class ImagePreprocessor {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return original;
 
-    var processed = decoded;
+    var processed = img.bakeOrientation(decoded);
 
-    // Keep enough resolution for small table cells and prayer-time digits.
-    const maxDimension = 2400;
-    if (processed.width > maxDimension || processed.height > maxDimension) {
+    // Timetable cells contain very small Arabic text and digits. Upscale smaller
+    // images instead of only shrinking large ones so Tesseract gets more pixels
+    // per character.
+    const targetLongEdge = 3200;
+    final longEdge = processed.width > processed.height
+        ? processed.width
+        : processed.height;
+    if (longEdge != targetLongEdge) {
+      final scale = targetLongEdge / longEdge;
       processed = img.copyResize(
         processed,
-        width: processed.width >= processed.height ? maxDimension : null,
-        height: processed.height > processed.width ? maxDimension : null,
-        maintainAspect: true,
-        interpolation: img.Interpolation.linear,
+        width: (processed.width * scale).round(),
+        height: (processed.height * scale).round(),
+        interpolation: img.Interpolation.cubic,
       );
     }
 
-    // Grayscale improves contrast between table text and a light background
-    // without applying destructive thresholding or aggressive compression.
     processed = img.grayscale(processed);
+
+    // Stretch the luminance range. This makes faint table digits more distinct
+    // while retaining grid lines that help Tesseract understand rows.
+    final stats = _luminanceRange(processed);
+    if (stats.$2 > stats.$1) {
+      final minValue = stats.$1;
+      final range = stats.$2 - stats.$1;
+      for (final pixel in processed) {
+        final value = pixel.r.toDouble();
+        final normalized = ((value - minValue) * 255.0 / range)
+            .clamp(0.0, 255.0)
+            .round();
+        pixel
+          ..r = normalized
+          ..g = normalized
+          ..b = normalized;
+      }
+    }
 
     final tempDir = await getTemporaryDirectory();
     final output = File(
@@ -33,5 +54,16 @@ class ImagePreprocessor {
     );
     await output.writeAsBytes(img.encodePng(processed), flush: true);
     return output;
+  }
+
+  (double, double) _luminanceRange(img.Image image) {
+    var minValue = 255.0;
+    var maxValue = 0.0;
+    for (final pixel in image) {
+      final value = pixel.r.toDouble();
+      if (value < minValue) minValue = value;
+      if (value > maxValue) maxValue = value;
+    }
+    return (minValue, maxValue);
   }
 }
