@@ -15,6 +15,12 @@ class AIService {
     try {
       final normalizedText = _parser.normalizeOcrText(rawText);
       final timeTokens = _parser.extractTimeTokens(normalizedText);
+      final numberedLines = normalizedText
+          .split('\n')
+          .asMap()
+          .entries
+          .map((entry) => '${entry.key + 1}: ${entry.value}')
+          .join('\n');
 
       final data = await _apiClient.chatCompletion({
         'model': 'openai/gpt-oss-120b',
@@ -22,27 +28,36 @@ class AIService {
           {
             'role': 'system',
             'content': '''
-You convert OCR text from an Arabic Ramadan Imsakia into structured prayer days.
+You reconstruct an Arabic Ramadan Imsakia table from noisy OCR.
 Return ONLY valid JSON using exactly this top-level shape:
 {"days":[{"date":"YYYY-MM-DD or null","fajr":"HH:mm or null","sunrise":"HH:mm or null","dhuhr":"HH:mm or null","asr":"HH:mm or null","maghrib":"HH:mm or null","isha":"HH:mm or null"}]}
 Do not use Markdown or explanations.
-Return one object for every day that can be reliably identified.
-Never invent a date or prayer time. If a value is missing or unreadable, use null.
-Use the second Fajr adhan when the timetable contains multiple Fajr entries.
-Convert Arabic and Persian digits to English digits.
-Times must be HH:mm in 24-hour format.
-Keep the date as YYYY-MM-DD only when year/month/day can be reliably determined.
-Do not infer today's date from the device or current date.
-Do not use unrelated numbers such as page numbers as prayer times.
+
+IMPORTANT TABLE RULES:
+- Preserve table rows. One visible timetable day/row should become one item in "days".
+- Do NOT return only the cleanest rows. Include every day/row that can be identified from a day number, weekday, Hijri/Gregorian date fragment, or a coherent run of prayer times.
+- If a row is identifiable but one or more fields are unreadable, include the row and set only those unreadable fields to null.
+- Keep rows in the same order as the source image.
+- Never invent a missing prayer time or date.
+- If the timetable shows two Fajr entries, use the second Fajr adhan for "fajr".
+- Convert Arabic and Persian digits to English digits.
+- Times must be HH:mm in 24-hour format.
+- Keep "date" as YYYY-MM-DD only when year/month/day are actually recoverable from the timetable. Otherwise use null.
+- Never infer today's date or the current year from the device.
+- Ignore page numbers, social media text, decorative numbers, and headings.
+- Prayer column order is normally: fajr, sunrise, dhuhr, asr, maghrib, isha. Use headings/context to verify it.
+- A row with several prayer-like times is more important than unrelated text on the same OCR line.
 ''',
           },
           {
             'role': 'user',
-            'content': '''OCR TEXT:
-$normalizedText
+            'content': '''LINE-NUMBERED OCR TEXT:
+$numberedLines
 
-TIME-LIKE TOKENS FOUND BY LOCAL PARSER:
-${timeTokens.join(', ')}''',
+ALL TIME-LIKE TOKENS DETECTED LOCALLY:
+${timeTokens.join(', ')}
+
+Reconstruct as many actual timetable rows as the OCR supports. Prefer incomplete rows with null fields over dropping a real day entirely.''',
           },
         ],
         'temperature': 0,
