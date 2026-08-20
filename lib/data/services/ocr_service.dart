@@ -13,20 +13,31 @@ class OCRService {
   static const _trainedDataBaseUrl =
       'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
 
+  static const _ocrArgs = {
+    // Sparse text works better for timetable cells than treating the whole
+    // image as one paragraph/block.
+    'psm': '11',
+    'preserve_interword_spaces': '1',
+    'user_defined_dpi': '300',
+  };
+
   final ImagePreprocessor _preprocessor = ImagePreprocessor();
 
   Future<String> extractText(XFile image) async {
     final prepared = await _preprocessor.prepareForOcr(File(image.path));
     await _ensureTrainedData();
 
-    return FlutterTesseractOcr.extractText(
-      prepared.path,
-      language: _languages,
-      args: const {
-        'psm': '6',
-        'preserve_interword_spaces': '1',
-      },
-    );
+    try {
+      return await FlutterTesseractOcr.extractText(
+        prepared.path,
+        language: _languages,
+        args: _ocrArgs,
+      );
+    } finally {
+      if (prepared.path != image.path && await prepared.exists()) {
+        await prepared.delete();
+      }
+    }
   }
 
   Future<String> extractTextFromPdf(File pdfFile) async {
@@ -40,9 +51,9 @@ class OCRService {
         final page = await document.getPage(pageNumber);
         try {
           final rendered = await page.render(
-            width: page.width * 2.0,
-            height: page.height * 2.0,
-            format: PdfPageImageFormat.jpeg,
+            width: page.width * 2.5,
+            height: page.height * 2.5,
+            format: PdfPageImageFormat.png,
             backgroundColor: '#ffffff',
           );
 
@@ -50,24 +61,25 @@ class OCRService {
 
           final tempDir = await getTemporaryDirectory();
           final imageFile = File(
-            '${tempDir.path}/munib_pdf_${DateTime.now().microsecondsSinceEpoch}_$pageNumber.jpg',
+            '${tempDir.path}/munib_pdf_${DateTime.now().microsecondsSinceEpoch}_$pageNumber.png',
           );
           await imageFile.writeAsBytes(rendered.bytes);
 
+          File? prepared;
           try {
-            final prepared = await _preprocessor.prepareForOcr(imageFile);
+            prepared = await _preprocessor.prepareForOcr(imageFile);
             final text = await FlutterTesseractOcr.extractText(
               prepared.path,
               language: _languages,
-              args: const {
-                'psm': '6',
-                'preserve_interword_spaces': '1',
-              },
+              args: _ocrArgs,
             );
-            if (text.trim().isNotEmpty) {
-              chunks.add(text);
-            }
+            if (text.trim().isNotEmpty) chunks.add(text);
           } finally {
+            if (prepared != null &&
+                prepared.path != imageFile.path &&
+                await prepared.exists()) {
+              await prepared.delete();
+            }
             if (await imageFile.exists()) await imageFile.delete();
           }
         } finally {
