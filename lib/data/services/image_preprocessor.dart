@@ -11,8 +11,28 @@ class ImagePreprocessor {
 
     var processed = img.bakeOrientation(decoded);
 
-    // Keep enough detail for timetable cells without creating a huge image
-    // that freezes lower/mid-range phones during preprocessing and OCR.
+    // Most photographed Imsakia sheets are portrait posters where the upper
+    // area contains branding, mosque photos and headings while the actual
+    // timetable begins lower down. Cropping that decorative area improves OCR
+    // row consistency and avoids sending irrelevant text to the AI.
+    if (processed.height > processed.width * 1.15) {
+      final cropX = (processed.width * 0.025).round();
+      final cropY = (processed.height * 0.18).round();
+      final cropWidth = processed.width - (cropX * 2);
+      final cropHeight = (processed.height * 0.805).round();
+
+      if (cropWidth > 0 && cropHeight > 0 && cropY + cropHeight <= processed.height) {
+        processed = img.copyCrop(
+          processed,
+          x: cropX,
+          y: cropY,
+          width: cropWidth,
+          height: cropHeight,
+        );
+      }
+    }
+
+    // Enough detail for small timetable digits without freezing mid-range phones.
     const targetLongEdge = 2200;
     final longEdge = processed.width > processed.height
         ? processed.width
@@ -28,8 +48,6 @@ class ImagePreprocessor {
       );
     }
 
-    // Lightweight preprocessing only. The previous per-pixel contrast pass
-    // caused noticeable UI stalls and made OCR much slower on device.
     processed = img.grayscale(processed);
 
     final tempDir = await getTemporaryDirectory();
