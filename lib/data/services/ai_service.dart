@@ -23,12 +23,16 @@ class AIService {
             'role': 'system',
             'content': '''
 You convert OCR text from an Arabic Ramadan Imsakia into structured prayer days.
-Return an object with a "days" array containing one object for every day that can be reliably identified.
-Never invent a date or prayer time. If a value is missing or unreadable, return null.
+Return ONLY valid JSON using exactly this top-level shape:
+{"days":[{"date":"YYYY-MM-DD or null","fajr":"HH:mm or null","sunrise":"HH:mm or null","dhuhr":"HH:mm or null","asr":"HH:mm or null","maghrib":"HH:mm or null","isha":"HH:mm or null"}]}
+Do not use Markdown or explanations.
+Return one object for every day that can be reliably identified.
+Never invent a date or prayer time. If a value is missing or unreadable, use null.
 Use the second Fajr adhan when the timetable contains multiple Fajr entries.
 Convert Arabic and Persian digits to English digits.
 Times must be HH:mm in 24-hour format.
-Keep the date as YYYY-MM-DD when the year/month/day can be determined.
+Keep the date as YYYY-MM-DD only when year/month/day can be reliably determined.
+Do not infer today's date from the device or current date.
 Do not use unrelated numbers such as page numbers as prayer times.
 ''',
           },
@@ -42,7 +46,7 @@ ${timeTokens.join(', ')}''',
           },
         ],
         'temperature': 0,
-        'response_format': _prayerSchema(),
+        'response_format': {'type': 'json_object'},
       });
 
       return _extractPrayerArray(data);
@@ -62,14 +66,18 @@ ${timeTokens.join(', ')}''',
         'model': 'openai/gpt-oss-120b',
         'messages': [
           {
+            'role': 'system',
+            'content':
+                'Return ONLY a valid JSON object with a "days" array. Do not use Markdown.',
+          },
+          {
             'role': 'user',
             'content':
-                'Generate prayer times for $city for June 2026. Return an object with a "days" array. '
-                'Use Adhan Thani for fajr. Do not invent values that cannot be reliably determined.',
+                'Generate prayer times for $city for June 2026. Use Adhan Thani for fajr. Do not invent values that cannot be reliably determined.',
           },
         ],
         'temperature': 0.1,
-        'response_format': _prayerSchema(),
+        'response_format': {'type': 'json_object'},
       });
 
       return _extractPrayerArray(data);
@@ -77,48 +85,6 @@ ${timeTokens.join(', ')}''',
       print('Error fetching prayer times by location: $e');
       return [];
     }
-  }
-
-  Map<String, dynamic> _prayerSchema() {
-    return {
-      'type': 'json_schema',
-      'json_schema': {
-        'name': 'imsakia_prayer_days',
-        'strict': true,
-        'schema': {
-          'type': 'object',
-          'additionalProperties': false,
-          'properties': {
-            'days': {
-              'type': 'array',
-              'items': {
-                'type': 'object',
-                'additionalProperties': false,
-                'properties': {
-                  'date': {'type': ['string', 'null']},
-                  'fajr': {'type': ['string', 'null']},
-                  'sunrise': {'type': ['string', 'null']},
-                  'dhuhr': {'type': ['string', 'null']},
-                  'asr': {'type': ['string', 'null']},
-                  'maghrib': {'type': ['string', 'null']},
-                  'isha': {'type': ['string', 'null']},
-                },
-                'required': [
-                  'date',
-                  'fajr',
-                  'sunrise',
-                  'dhuhr',
-                  'asr',
-                  'maghrib',
-                  'isha',
-                ],
-              },
-            },
-          },
-          'required': ['days'],
-        },
-      },
-    };
   }
 
   List<Map<String, dynamic>> _extractPrayerArray(
@@ -158,7 +124,6 @@ ${timeTokens.join(', ')}''',
     if (decoded is Map && decoded['days'] is List) {
       return decoded['days'] as List<dynamic>;
     }
-    // Keep backward compatibility if a non-schema response ever returns an array.
     if (decoded is List) return decoded;
     return null;
   }
