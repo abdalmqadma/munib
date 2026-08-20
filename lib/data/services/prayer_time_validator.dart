@@ -60,7 +60,7 @@ class PrayerTimeValidator {
   }
 
   int? _parseMinutes(String value) {
-    final match = RegExp(r'^(\d{1,2}):(\d{2})\$').firstMatch(value);
+    final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(value);
     if (match == null) return null;
 
     final hour = int.tryParse(match.group(1)!);
@@ -73,7 +73,7 @@ class PrayerTimeValidator {
   }
 
   bool _isIsoDate(String value) {
-    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})\$').firstMatch(value);
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
     if (match == null) return false;
 
     final year = int.tryParse(match.group(1)!);
