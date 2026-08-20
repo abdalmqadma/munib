@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../data/services/auth_service.dart';
-import 'splash_screen.dart';
+import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -13,19 +13,19 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final AuthService _auth = AuthService();
   final _formKey = GlobalKey<FormState>();
-  
+
   bool isLogin = true;
   String email = '';
   String password = '';
   String name = '';
   bool isLoading = false;
 
-  void _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate() || isLoading) return;
     _formKey.currentState!.save();
-    
+
     setState(() => isLoading = true);
-    
+
     try {
       User? result;
       if (isLogin) {
@@ -34,41 +34,50 @@ class _AuthScreenState extends State<AuthScreen> {
         result = await _auth.registerWithEmail(email, password, name);
       }
 
-      if (mounted) {
-        if (result != null) {
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SplashScreen()));
-        } else {
-          _showError('تأكد من البيانات المحفوظة أو تفعيل حسابك');
-        }
+      if (!mounted) return;
+
+      if (result != null) {
+        _goToHome();
+        return;
       }
+
+      _showError('تأكد من البيانات المحفوظة أو تفعيل حسابك');
     } catch (e) {
-      _showError(e.toString());
+      if (mounted) _showError(e.toString());
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  void _signInWithGoogle() async {
+  Future<void> _signInWithGoogle() async {
+    if (isLoading) return;
     setState(() => isLoading = true);
+
     try {
-      print("DEBUG: Starting Google Sign-In sequence...");
       final user = await _auth.signInWithGoogle();
-      
-      if (mounted) {
-        if (user != null) {
-          print("DEBUG: Google Sign-In Successful for user: ${user.email}");
-          Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SplashScreen()));
-        } else {
-          print("DEBUG: Google Sign-In returned null (Cancelled or failed)");
-          _showError('تم إلغاء عملية الدخول');
-        }
+
+      if (!mounted) return;
+
+      if (user != null) {
+        _goToHome();
+        return;
       }
+
+      _showError('تم إلغاء عملية الدخول أو تعذر إكمالها');
     } catch (e) {
-      print("DEBUG: Fatal error during Google Sign-In: $e");
-      _showError('حدث خطأ غير متوقع أثناء الاتصال بجوجل');
+      if (mounted) {
+        _showError('حدث خطأ غير متوقع أثناء الاتصال بجوجل');
+      }
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  void _goToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      (route) => false,
+    );
   }
 
   void _showError(String message) {
@@ -115,7 +124,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ],
                 const SizedBox(height: 20),
                 TextButton(
-                  onPressed: () => setState(() => isLogin = !isLogin),
+                  onPressed: isLoading ? null : () => setState(() => isLogin = !isLogin),
                   child: Text(
                     isLogin ? 'لا تملك حساباً؟ سجل الآن' : 'تملك حساباً بالفعل؟ سجل دخولك',
                     style: const TextStyle(color: Colors.white38),
@@ -129,7 +138,13 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildTextField(String label, IconData icon, Function(String?) onSave, {bool isEmail = false, bool isPass = false}) {
+  Widget _buildTextField(
+    String label,
+    IconData icon,
+    Function(String?) onSave, {
+    bool isEmail = false,
+    bool isPass = false,
+  }) {
     return TextFormField(
       style: const TextStyle(color: Colors.white),
       obscureText: isPass,
@@ -138,8 +153,14 @@ class _AuthScreenState extends State<AuthScreen> {
         labelText: label,
         labelStyle: const TextStyle(color: Colors.white38),
         prefixIcon: Icon(icon, color: const Color(0xFFFFD166), size: 20),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Colors.white12)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: const BorderSide(color: Color(0xFF1E88E5))),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Colors.white12),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: const BorderSide(color: Color(0xFF1E88E5)),
+        ),
       ),
       validator: (val) => val == null || val.isEmpty ? 'هذا الحقل مطلوب' : null,
       onSaved: onSave,
@@ -156,7 +177,10 @@ class _AuthScreenState extends State<AuthScreen> {
           backgroundColor: const Color(0xFF1E88E5),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         ),
-        child: Text(isLogin ? 'دخول' : 'إنشاء الحساب', style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+        child: Text(
+          isLogin ? 'دخول' : 'إنشاء الحساب',
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
