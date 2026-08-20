@@ -40,8 +40,8 @@ class OCRService {
         final page = await document.getPage(pageNumber);
         try {
           final rendered = await page.render(
-            width: (page.width * 2).round(),
-            height: (page.height * 2).round(),
+            width: page.width * 2.0,
+            height: page.height * 2.0,
             format: PdfPageImageFormat.jpeg,
             backgroundColor: '#ffffff',
           );
