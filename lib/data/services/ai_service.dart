@@ -23,7 +23,7 @@ class AIService {
             'role': 'system',
             'content': '''
 You convert OCR text from an Arabic Ramadan Imsakia into structured prayer days.
-Return one object for every day that can be reliably identified.
+Return an object with a "days" array containing one object for every day that can be reliably identified.
 Never invent a date or prayer time. If a value is missing or unreadable, return null.
 Use the second Fajr adhan when the timetable contains multiple Fajr entries.
 Convert Arabic and Persian digits to English digits.
@@ -42,12 +42,54 @@ ${timeTokens.join(', ')}''',
           },
         ],
         'temperature': 0,
-        'response_format': {
-          'type': 'json_schema',
-          'json_schema': {
-            'name': 'imsakia_prayer_days',
-            'strict': true,
-            'schema': {
+        'response_format': _prayerSchema(),
+      });
+
+      return _extractPrayerArray(data);
+    } catch (e) {
+      print('Error structuring OCR text: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPrayerTimesByLocation(
+    String city,
+  ) async {
+    if (city.trim().isEmpty) return [];
+
+    try {
+      final data = await _apiClient.chatCompletion({
+        'model': 'openai/gpt-oss-120b',
+        'messages': [
+          {
+            'role': 'user',
+            'content':
+                'Generate prayer times for $city for June 2026. Return an object with a "days" array. '
+                'Use Adhan Thani for fajr. Do not invent values that cannot be reliably determined.',
+          },
+        ],
+        'temperature': 0.1,
+        'response_format': _prayerSchema(),
+      });
+
+      return _extractPrayerArray(data);
+    } catch (e) {
+      print('Error fetching prayer times by location: $e');
+      return [];
+    }
+  }
+
+  Map<String, dynamic> _prayerSchema() {
+    return {
+      'type': 'json_schema',
+      'json_schema': {
+        'name': 'imsakia_prayer_days',
+        'strict': true,
+        'schema': {
+          'type': 'object',
+          'additionalProperties': false,
+          'properties': {
+            'days': {
               'type': 'array',
               'items': {
                 'type': 'object',
@@ -73,73 +115,7 @@ ${timeTokens.join(', ')}''',
               },
             },
           },
-        },
-      });
-
-      return _extractPrayerArray(data);
-    } catch (e) {
-      print('Error structuring OCR text: $e');
-      return [];
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> fetchPrayerTimesByLocation(
-    String city,
-  ) async {
-    if (city.trim().isEmpty) return [];
-
-    try {
-      final data = await _apiClient.chatCompletion({
-        'model': 'openai/gpt-oss-120b',
-        'messages': [
-          {
-            'role': 'user',
-            'content':
-                'Generate prayer times for $city for June 2026 as a JSON array. '
-                'Use Adhan Thani for fajr. Do not invent values that cannot be reliably determined.',
-          },
-        ],
-        'temperature': 0.1,
-        'response_format': _prayerSchema(),
-      });
-
-      return _extractPrayerArray(data);
-    } catch (e) {
-      print('Error fetching prayer times by location: $e');
-      return [];
-    }
-  }
-
-  Map<String, dynamic> _prayerSchema() {
-    return {
-      'type': 'json_schema',
-      'json_schema': {
-        'name': 'imsakia_prayer_days',
-        'strict': true,
-        'schema': {
-          'type': 'array',
-          'items': {
-            'type': 'object',
-            'additionalProperties': false,
-            'properties': {
-              'date': {'type': ['string', 'null']},
-              'fajr': {'type': ['string', 'null']},
-              'sunrise': {'type': ['string', 'null']},
-              'dhuhr': {'type': ['string', 'null']},
-              'asr': {'type': ['string', 'null']},
-              'maghrib': {'type': ['string', 'null']},
-              'isha': {'type': ['string', 'null']},
-            },
-            'required': [
-              'date',
-              'fajr',
-              'sunrise',
-              'dhuhr',
-              'asr',
-              'maghrib',
-              'isha',
-            ],
-          },
+          'required': ['days'],
         },
       },
     };
@@ -158,29 +134,33 @@ ${timeTokens.join(', ')}''',
 
     try {
       final decoded = jsonDecode(cleaned);
-      if (decoded is List) {
-        return decoded
-            .whereType<Map>()
-            .map(_normalizePrayerDay)
-            .toList();
+      final list = _extractDaysList(decoded);
+      if (list != null) {
+        return list.whereType<Map>().map(_normalizePrayerDay).toList();
       }
     } catch (_) {
-      final match = RegExp(r'\[\s*\{.*\}\s*\]', dotAll: true)
-          .firstMatch(cleaned);
-      if (match != null) {
+      final objectMatch = RegExp(r'\{.*\}', dotAll: true).firstMatch(cleaned);
+      if (objectMatch != null) {
         try {
-          final decoded = jsonDecode(match.group(0)!);
-          if (decoded is List) {
-            return decoded
-                .whereType<Map>()
-                .map(_normalizePrayerDay)
-                .toList();
+          final decoded = jsonDecode(objectMatch.group(0)!);
+          final list = _extractDaysList(decoded);
+          if (list != null) {
+            return list.whereType<Map>().map(_normalizePrayerDay).toList();
           }
         } catch (_) {}
       }
     }
 
     return [];
+  }
+
+  List<dynamic>? _extractDaysList(dynamic decoded) {
+    if (decoded is Map && decoded['days'] is List) {
+      return decoded['days'] as List<dynamic>;
+    }
+    // Keep backward compatibility if a non-schema response ever returns an array.
+    if (decoded is List) return decoded;
+    return null;
   }
 
   Map<String, dynamic> _normalizePrayerDay(Map item) {
