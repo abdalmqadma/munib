@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -57,19 +58,44 @@ class _UploadScreenState extends State<UploadScreen> {
     try {
       final inputFile = File(file.path);
       final isPdf = file.path.toLowerCase().endsWith('.pdf');
+      final fileSize = await inputFile.length();
+      debugPrint('[MUNIB] Processing started: ${file.path}');
+      debugPrint('[MUNIB] Input type: ${isPdf ? 'PDF' : 'IMAGE'}, bytes: $fileSize');
 
       setState(() => _loadingStep = 2);
+      debugPrint('[MUNIB] OCR START');
+      final ocrWatch = Stopwatch()..start();
 
-      final rawOcrText = isPdf
-          ? await _ocrService.extractTextFromPdf(inputFile)
-          : await _ocrService.extractText(file);
+      final rawOcrText = await (isPdf
+              ? _ocrService.extractTextFromPdf(inputFile)
+              : _ocrService.extractText(file))
+          .timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw TimeoutException('OCR timed out after 90 seconds'),
+      );
+
+      ocrWatch.stop();
+      debugPrint('[MUNIB] OCR FINISHED in ${ocrWatch.elapsedMilliseconds} ms');
+      debugPrint('[MUNIB] OCR characters: ${rawOcrText.length}');
+      final preview = rawOcrText.replaceAll(RegExp(r'\s+'), ' ').trim();
+      debugPrint('[MUNIB] OCR preview: ${preview.length > 500 ? preview.substring(0, 500) : preview}');
 
       if (rawOcrText.trim().isEmpty) {
         throw Exception('OCR returned no text');
       }
 
       setState(() => _loadingStep = 3);
-      final structuredData = await _aiService.structurePrayerTimes(rawOcrText);
+      debugPrint('[MUNIB] AI START');
+      final aiWatch = Stopwatch()..start();
+      final structuredData = await _aiService
+          .structurePrayerTimes(rawOcrText)
+          .timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException('AI request timed out after 60 seconds'),
+      );
+      aiWatch.stop();
+      debugPrint('[MUNIB] AI FINISHED in ${aiWatch.elapsedMilliseconds} ms');
+      debugPrint('[MUNIB] AI returned ${structuredData.length} prayer day(s)');
 
       setState(() => _loadingStep = 4);
       await Future.delayed(const Duration(milliseconds: 300));
@@ -77,18 +103,24 @@ class _UploadScreenState extends State<UploadScreen> {
       if (!mounted) return;
 
       if (structuredData.isEmpty) {
+        debugPrint('[MUNIB] Processing failed: AI returned an empty prayer-day list');
         _showErrorUI();
         return;
       }
 
+      debugPrint('[MUNIB] Processing successful; opening review screen');
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
           builder: (_) => ReviewScreen(initialData: structuredData),
         ),
       );
-    } catch (e) {
-      debugPrint('Imsakia processing failed: $e');
+    } on TimeoutException catch (e) {
+      debugPrint('[MUNIB] TIMEOUT: $e');
+      if (mounted) _showErrorUI();
+    } catch (e, stackTrace) {
+      debugPrint('[MUNIB] Imsakia processing failed: $e');
+      debugPrint('[MUNIB] Stack trace: $stackTrace');
       if (mounted) _showErrorUI();
     } finally {
       if (mounted && !_hasError) {
