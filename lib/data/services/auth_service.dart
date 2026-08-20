@@ -20,19 +20,25 @@ class AuthService {
       final user = result.user;
 
       if (user != null) {
-        try {
-          await _firestore.collection('users').doc(user.uid).set({
-            'name': name,
+        final trimmedName = name.trim();
+        if (trimmedName.isNotEmpty) {
+          await user.updateDisplayName(trimmedName);
+          await user.reload();
+        }
+
+        unawaited(
+          _firestore.collection('users').doc(user.uid).set({
+            'name': trimmedName,
             'email': email,
             'created_at': FieldValue.serverTimestamp(),
             'score': 0,
-          }).timeout(const Duration(seconds: 8));
-        } catch (_) {
-          // Authentication succeeded. Profile sync can be retried later.
-        }
+          }, SetOptions(merge: true)).timeout(const Duration(seconds: 8)).catchError((_) {}),
+        );
+
+        return FirebaseAuth.instance.currentUser;
       }
 
-      return user;
+      return null;
     } on FirebaseAuthException {
       return null;
     }
@@ -68,7 +74,6 @@ class AuthService {
       final user = result.user;
 
       if (user != null) {
-        // Do not block successful navigation on an optional Firestore write.
         unawaited(
           _firestore.collection('users').doc(user.uid).set({
             'name': user.displayName,
