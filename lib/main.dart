@@ -10,6 +10,7 @@ import 'presentation/screens/splash_screen.dart';
 import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'core/munib_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,29 +43,18 @@ class ImsakiahApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PrayerProvider>();
-
-    // ضبط ألوان شريط الحالة (Status Bar) ليتناسب مع الثيم
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness:
-          provider.isDarkMode ? Brightness.light : Brightness.dark,
-      statusBarBrightness:
-          provider.isDarkMode ? Brightness.dark : Brightness.light,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+      systemNavigationBarColor: MunibTheme.background,
+      systemNavigationBarIconBrightness: Brightness.light,
     ));
 
     return MaterialApp(
-      title: 'Imsakiah AI',
+      title: 'منيب',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: provider.isDarkMode ? Brightness.dark : Brightness.light,
-        primarySwatch: Colors.blue,
-        fontFamily: 'Inter',
-        useMaterial3: true,
-        scaffoldBackgroundColor: provider.isDarkMode
-            ? const Color(0xFF071019)
-            : const Color(0xFFF5F7FA),
-      ),
+      theme: MunibTheme.dark(),
       home: const SplashScreen(),
     );
   }
