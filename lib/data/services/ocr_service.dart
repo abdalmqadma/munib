@@ -14,9 +14,10 @@ class OCRService {
       'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
 
   static const _ocrArgs = {
-    // Sparse text works better for timetable cells than treating the whole
-    // image as one paragraph/block.
-    'psm': '11',
+    // PSM 6 keeps text grouped into lines. For an Imsakia table this is more
+    // useful than sparse-text mode because each visual row should remain close
+    // together before the AI structuring step.
+    'psm': '6',
     'preserve_interword_spaces': '1',
     'user_defined_dpi': '300',
   };
@@ -51,8 +52,8 @@ class OCRService {
         final page = await document.getPage(pageNumber);
         try {
           final rendered = await page.render(
-            width: page.width * 2.5,
-            height: page.height * 2.5,
+            width: page.width * 2.2,
+            height: page.height * 2.2,
             format: PdfPageImageFormat.png,
             backgroundColor: '#ffffff',
           );
