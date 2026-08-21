@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:camera/camera.dart';
@@ -37,6 +38,15 @@ class _TrainingScreenState extends State<TrainingScreen> {
   bool _voiceEnabled = true;
   bool _savedCompletion = false;
   int _lastSpokenFeedbackVersion = -1;
+
+  bool _bodyAligned = false;
+  bool _bodyLocked = false;
+  bool _sessionStarted = false;
+  int _alignmentFrames = 0;
+  int _countdown = 3;
+  Timer? _countdownTimer;
+
+  static const int _requiredAlignmentFrames = 10;
 
   static const _orientations = <DeviceOrientation, int>{
     DeviceOrientation.portraitUp: 0,
@@ -118,6 +128,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
     final nextDirection = _activeCamera?.lensDirection == CameraLensDirection.front
         ? CameraLensDirection.back
         : CameraLensDirection.front;
+    _cancelCountdown(resetAlignment: true);
     await _initializeCamera(preferred: nextDirection);
   }
 
@@ -128,14 +139,153 @@ class _TrainingScreenState extends State<TrainingScreen> {
       final inputImage = _inputImageFromCameraImage(image);
       if (inputImage == null) return;
       final poses = await _poseDetector.processImage(inputImage);
-      if (poses.isNotEmpty && mounted) {
-        context.read<PrayerCoachProvider>().processPose(poses.first);
+
+      if (poses.isEmpty || !mounted) {
+        if (!_sessionStarted) _updateAlignment(false);
+        return;
       }
+
+      final pose = poses.first;
+      if (!_sessionStarted) {
+        _updateAlignment(_isPoseInsideGuide(pose, image));
+        return;
+      }
+
+      context.read<PrayerCoachProvider>().processPose(pose);
     } catch (e) {
       debugPrint('Prayer coach pose error: $e');
     } finally {
       _isProcessing = false;
     }
+  }
+
+  bool _isPoseInsideGuide(Pose pose, CameraImage image) {
+    final required = <PoseLandmarkType>[
+      PoseLandmarkType.nose,
+      PoseLandmarkType.leftShoulder,
+      PoseLandmarkType.rightShoulder,
+      PoseLandmarkType.leftHip,
+      PoseLandmarkType.rightHip,
+      PoseLandmarkType.leftKnee,
+      PoseLandmarkType.rightKnee,
+      PoseLandmarkType.leftAnkle,
+      PoseLandmarkType.rightAnkle,
+    ];
+
+    final landmarks = required
+        .map((type) => pose.landmarks[type])
+        .whereType<PoseLandmark>()
+        .toList();
+    if (landmarks.length < 8) return false;
+
+    final xs = landmarks.map((e) => e.x).toList();
+    final ys = landmarks.map((e) => e.y).toList();
+    final minX = xs.reduce((a, b) => a < b ? a : b);
+    final maxX = xs.reduce((a, b) => a > b ? a : b);
+    final minY = ys.reduce((a, b) => a < b ? a : b);
+    final maxY = ys.reduce((a, b) => a > b ? a : b);
+
+    final frameWidth = image.width.toDouble();
+    final frameHeight = image.height.toDouble();
+    final bodyWidth = maxX - minX;
+    final bodyHeight = maxY - minY;
+    final centerX = (minX + maxX) / 2;
+    final centerY = (minY + maxY) / 2;
+
+    final widthRatio = bodyWidth / frameWidth;
+    final heightRatio = bodyHeight / frameHeight;
+    final xRatio = centerX / frameWidth;
+    final yRatio = centerY / frameHeight;
+
+    final centered = xRatio > .28 && xRatio < .72 && yRatio > .34 && yRatio < .70;
+    final goodDistance = heightRatio > .48 && heightRatio < .92 && widthRatio < .62;
+    final enoughMargins = minY > frameHeight * .015 && maxY < frameHeight * .985;
+
+    return centered && goodDistance && enoughMargins;
+  }
+
+  void _updateAlignment(bool aligned) {
+    if (!mounted || _sessionStarted) return;
+
+    if (!aligned) {
+      if (_bodyLocked || _countdownTimer != null) {
+        _cancelCountdown(resetAlignment: true);
+      } else if (_bodyAligned || _alignmentFrames != 0) {
+        setState(() {
+          _bodyAligned = false;
+          _alignmentFrames = 0;
+        });
+      }
+      return;
+    }
+
+    if (_bodyLocked) return;
+
+    _alignmentFrames++;
+    if (!_bodyAligned && _alignmentFrames >= 3) {
+      setState(() => _bodyAligned = true);
+    }
+
+    if (_alignmentFrames >= _requiredAlignmentFrames) {
+      _lockBodyAndStartCountdown();
+    }
+  }
+
+  Future<void> _lockBodyAndStartCountdown() async {
+    if (_bodyLocked || _sessionStarted || !mounted) return;
+
+    setState(() {
+      _bodyLocked = true;
+      _bodyAligned = true;
+      _countdown = 3;
+    });
+
+    await _speak(context.tr('coachLocked'));
+    if (!mounted || !_bodyLocked) return;
+
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      if (!mounted || !_bodyLocked) {
+        timer.cancel();
+        return;
+      }
+
+      if (_countdown > 1) {
+        setState(() => _countdown--);
+        await _speak('$_countdown');
+        return;
+      }
+
+      timer.cancel();
+      _countdownTimer = null;
+      setState(() {
+        _countdown = 0;
+        _sessionStarted = true;
+      });
+      await _speak(context.tr('coachBegin'));
+    });
+  }
+
+  void _cancelCountdown({bool resetAlignment = false}) {
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    if (!mounted) return;
+    setState(() {
+      _bodyLocked = false;
+      _countdown = 3;
+      if (resetAlignment) {
+        _bodyAligned = false;
+        _alignmentFrames = 0;
+      }
+    });
+  }
+
+  Future<void> _speak(String text) async {
+    if (!_voiceEnabled || !mounted) return;
+    final isEnglish = context.read<PrayerProvider>().isEnglish;
+    await _tts.stop();
+    await _tts.setLanguage(isEnglish ? 'en-US' : 'ar-SA');
+    await _tts.speak(text);
   }
 
   InputImage? _inputImageFromCameraImage(CameraImage image) {
@@ -171,14 +321,13 @@ class _TrainingScreenState extends State<TrainingScreen> {
   }
 
   void _handleCoachUpdate(PrayerCoachProvider coach) {
+    if (!_sessionStarted) return;
+
     if (coach.feedbackVersion != _lastSpokenFeedbackVersion) {
       _lastSpokenFeedbackVersion = coach.feedbackVersion;
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted || !_voiceEnabled) return;
-        final isEnglish = context.read<PrayerProvider>().isEnglish;
-        await _tts.stop();
-        await _tts.setLanguage(isEnglish ? 'en-US' : 'ar-SA');
-        await _tts.speak(context.tr(coach.feedbackKey));
+        await _speak(context.tr(coach.feedbackKey));
       });
     }
 
@@ -232,6 +381,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _tts.stop();
     _disposeCamera();
     _poseDetector.close();
@@ -266,6 +416,7 @@ class _TrainingScreenState extends State<TrainingScreen> {
               ),
             ),
           ),
+          if (!_sessionStarted) _buildCalibrationOverlay(context),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
@@ -273,7 +424,10 @@ class _TrainingScreenState extends State<TrainingScreen> {
                 children: [
                   _topBar(context, scheme),
                   const Spacer(),
-                  _feedbackCard(context, coach),
+                  if (_sessionStarted)
+                    _feedbackCard(context, coach)
+                  else
+                    _calibrationCard(context),
                 ],
               ),
             ),
@@ -329,6 +483,76 @@ class _TrainingScreenState extends State<TrainingScreen> {
             child: CameraPreview(_cameraController!),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCalibrationOverlay(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final guideColor = _bodyLocked
+        ? Colors.greenAccent
+        : _bodyAligned
+            ? scheme.primary
+            : scheme.onSurface.withValues(alpha: .72);
+
+    return IgnorePointer(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(54, 96, 54, 190),
+          child: CustomPaint(
+            painter: _BodyGuidePainter(color: guideColor, locked: _bodyLocked),
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _calibrationCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final title = _bodyLocked
+        ? context.tr('coachLocked')
+        : _bodyAligned
+            ? context.tr('coachHoldStill')
+            : context.tr('standInFrame');
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: scheme.surface.withValues(alpha: .94),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: _bodyLocked ? Colors.greenAccent.withValues(alpha: .65) : scheme.outline,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _bodyLocked ? Icons.lock_rounded : Icons.accessibility_new_rounded,
+            color: _bodyLocked ? Colors.greenAccent : scheme.primary,
+            size: 30,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          if (_bodyLocked) ...[
+            const SizedBox(height: 12),
+            Text(
+              '$_countdown',
+              textDirection: TextDirection.ltr,
+              style: theme.textTheme.displayMedium?.copyWith(
+                color: scheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -435,5 +659,68 @@ class _TrainingScreenState extends State<TrainingScreen> {
         ],
       ),
     );
+  }
+}
+
+class _BodyGuidePainter extends CustomPainter {
+  final Color color;
+  final bool locked;
+
+  const _BodyGuidePainter({required this.color, required this.locked});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = locked ? 4 : 3
+      ..strokeCap = StrokeCap.round;
+
+    final glow = Paint()
+      ..color = color.withValues(alpha: locked ? .28 : .12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = locked ? 12 : 8
+      ..strokeCap = StrokeCap.round;
+
+    final center = Offset(size.width / 2, size.height * .18);
+    final headRadius = size.width * .09;
+    canvas.drawCircle(center, headRadius, glow);
+    canvas.drawCircle(center, headRadius, paint);
+
+    final neck = Offset(center.dx, center.dy + headRadius);
+    final shoulderY = size.height * .31;
+    final hipY = size.height * .58;
+    final kneeY = size.height * .77;
+    final ankleY = size.height * .96;
+    final shoulderHalf = size.width * .19;
+    final hipHalf = size.width * .11;
+
+    final path = Path()
+      ..moveTo(neck.dx, neck.dy)
+      ..lineTo(center.dx, shoulderY)
+      ..moveTo(center.dx - shoulderHalf, shoulderY)
+      ..lineTo(center.dx + shoulderHalf, shoulderY)
+      ..moveTo(center.dx - shoulderHalf, shoulderY)
+      ..lineTo(size.width * .22, size.height * .53)
+      ..moveTo(center.dx + shoulderHalf, shoulderY)
+      ..lineTo(size.width * .78, size.height * .53)
+      ..moveTo(center.dx, shoulderY)
+      ..lineTo(center.dx, hipY)
+      ..moveTo(center.dx - hipHalf, hipY)
+      ..lineTo(center.dx + hipHalf, hipY)
+      ..moveTo(center.dx - hipHalf, hipY)
+      ..lineTo(size.width * .39, kneeY)
+      ..lineTo(size.width * .34, ankleY)
+      ..moveTo(center.dx + hipHalf, hipY)
+      ..lineTo(size.width * .61, kneeY)
+      ..lineTo(size.width * .66, ankleY);
+
+    canvas.drawPath(path, glow);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BodyGuidePainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.locked != locked;
   }
 }
