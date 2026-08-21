@@ -13,15 +13,7 @@ class OCRService {
   static const _trainedDataBaseUrl =
       'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
 
-  static const _contextArgs = {
-    'psm': '6',
-    'preserve_interword_spaces': '1',
-    'user_defined_dpi': '300',
-  };
-
-  static const _tableArgs = {
-    // The grid has already been removed, so Tesseract can treat the timetable
-    // as a normal multi-line block and preserve one visual row per text line.
+  static const _ocrArgs = {
     'psm': '6',
     'preserve_interword_spaces': '1',
     'user_defined_dpi': '300',
@@ -32,34 +24,25 @@ class OCRService {
   Future<String> extractText(XFile image) async {
     await _ensureTrainedData();
 
-    final parts = await _preprocessor.prepareTableOcrParts(File(image.path));
-    if (parts.isEmpty) return '';
+    final parts = await _preprocessor.prepareMonthlyOcrParts(File(image.path));
+    final chunks = <String>[];
 
     try {
-      String contextText = '';
-      String tableText = '';
-
-      if (parts.isNotEmpty) {
-        contextText = await FlutterTesseractOcr.extractText(
-          parts[0].path,
+      for (var i = 0; i < parts.length; i++) {
+        final text = await FlutterTesseractOcr.extractText(
+          parts[i].path,
           language: _languages,
-          args: _contextArgs,
+          args: _ocrArgs,
         );
+
+        if (text.trim().isEmpty) continue;
+
+        if (i == 0) {
+          chunks.add('=== HEADER / MONTH / YEAR / COLUMN CONTEXT ===\n$text');
+        } else {
+          chunks.add('=== TABLE ROW CANDIDATE $i ===\n$text');
+        }
       }
-
-      if (parts.length > 1) {
-        tableText = await FlutterTesseractOcr.extractText(
-          parts[1].path,
-          language: _languages,
-          args: _tableArgs,
-        );
-      }
-
-      return '''=== MONTH / YEAR / COLUMN CONTEXT ===
-${contextText.trim()}
-
-=== CLEAN TIMETABLE OCR ===
-${tableText.trim()}''';
     } finally {
       for (final part in parts) {
         if (part.path != image.path && await part.exists()) {
@@ -67,6 +50,8 @@ ${tableText.trim()}''';
         }
       }
     }
+
+    return chunks.join('\n\n');
   }
 
   Future<String> extractTextFromPdf(File pdfFile) async {
