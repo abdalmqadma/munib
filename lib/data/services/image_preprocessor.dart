@@ -5,225 +5,217 @@ import 'package:path_provider/path_provider.dart';
 
 class ImagePreprocessor {
   Future<File> prepareForOcr(File original) async {
-    final bytes = await original.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return original;
-
-    var processed = img.bakeOrientation(decoded);
-
-    if (processed.height > processed.width * 1.15) {
-      final cropX = (processed.width * 0.025).round();
-      final cropY = (processed.height * 0.14).round();
-      final cropWidth = processed.width - (cropX * 2);
-      final cropHeight = (processed.height * 0.84).round();
-
-      if (cropWidth > 0 &&
-          cropHeight > 0 &&
-          cropY + cropHeight <= processed.height) {
-        processed = img.copyCrop(
-          processed,
-          x: cropX,
-          y: cropY,
-          width: cropWidth,
-          height: cropHeight,
-        );
-      }
-    }
-
-    processed = _resizeForOcr(processed, targetLongEdge: 2200);
-    processed = img.grayscale(processed);
-
-    return _writeTemp(processed, 'munib_ocr_full');
+    final parts = await prepareTableOcrParts(original);
+    return parts.length > 1 ? parts[1] : parts.first;
   }
 
-  /// Returns a context/header image followed by row-level timetable crops.
-  /// We first try to detect the horizontal grid separators. If the poster uses
-  /// faint/non-detectable lines, we fall back to narrow overlapping bands.
-  Future<List<File>> prepareMonthlyOcrParts(File original) async {
+  /// Produces only two OCR images:
+  /// 1) a small context crop for month/year/column labels
+  /// 2) the timetable itself with grid lines removed
+  ///
+  /// Removing the grid before OCR is important: Tesseract otherwise mixes
+  /// separators, Arabic RTL text and adjacent cells into unrelated lines.
+  Future<List<File>> prepareTableOcrParts(File original) async {
     final bytes = await original.readAsBytes();
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return [original];
 
     final oriented = img.bakeOrientation(decoded);
-    final files = <File>[];
+    final gray = img.grayscale(oriented.clone());
 
-    // Keep a generous header/context crop so month + year + column headings
-    // remain available to the AI. This is separate from row OCR.
-    final contextHeight = (oriented.height * 0.42).round().clamp(1, oriented.height);
+    final horizontal = _detectHorizontalRules(gray);
+    final tableBounds = _chooseTableBounds(gray, horizontal);
+
+    // Context keeps only the useful area immediately above / at the table.
+    // This gives the AI month/year/column labels without mosque branding.
+    final contextTop = (tableBounds.top - (oriented.height * 0.13).round())
+        .clamp(0, oriented.height - 1);
+    final contextBottom = (tableBounds.top + (oriented.height * 0.12).round())
+        .clamp(contextTop + 1, oriented.height);
+
     var context = img.copyCrop(
       oriented,
-      x: 0,
-      y: 0,
-      width: oriented.width,
-      height: contextHeight,
+      x: tableBounds.left,
+      y: contextTop,
+      width: tableBounds.width,
+      height: contextBottom - contextTop,
     );
-    context = _resizeForOcr(context, targetLongEdge: 1900);
     context = img.grayscale(context);
-    files.add(await _writeTemp(context, 'munib_ocr_context'));
+    context = _binary(context, threshold: 190);
+    context = _resizeToWidth(context, 2200);
 
-    final sideMargin = (oriented.width * 0.015).round();
-    final bodyTop = (oriented.height * 0.20).round();
-    final bodyBottom = (oriented.height * 0.99).round();
-    final bodyHeight = (bodyBottom - bodyTop).clamp(1, oriented.height - bodyTop);
-    final bodyWidth = (oriented.width - sideMargin * 2).clamp(1, oriented.width);
-
-    var body = img.copyCrop(
-      oriented,
-      x: sideMargin,
-      y: bodyTop,
-      width: bodyWidth,
-      height: bodyHeight,
+    var table = img.copyCrop(
+      gray,
+      x: tableBounds.left,
+      y: tableBounds.top,
+      width: tableBounds.width,
+      height: tableBounds.height,
     );
 
-    // Detect horizontal table separators before grayscale/resizing so geometry
-    // still matches the source.
-    final separators = _detectHorizontalSeparators(body);
-    final rowRanges = _rowRangesFromSeparators(body.height, separators);
+    table = _binary(table, threshold: 190);
 
-    if (rowRanges.length >= 8) {
-      // The grid was detected. OCR each visual row independently so Tesseract
-      // no longer has to understand a 30-row RTL table at once.
-      var rowIndex = 0;
-      for (final range in rowRanges) {
-        final top = range.$1;
-        final height = range.$2;
-        if (height < 12) continue;
+    // Detect rules again on the cropped table so coordinates are local.
+    final localHorizontal = _detectHorizontalRules(table);
+    final localVertical = _detectVerticalRules(table);
 
-        final pad = (height * 0.12).round().clamp(2, 14);
-        final y = (top - pad).clamp(0, body.height - 1);
-        final end = (top + height + pad).clamp(y + 1, body.height);
+    _eraseHorizontalRules(table, localHorizontal);
+    _eraseVerticalRules(table, localVertical);
 
-        var row = img.copyCrop(
-          body,
-          x: 0,
-          y: y,
-          width: body.width,
-          height: end - y,
-        );
+    // A small white border prevents characters touching the crop edge.
+    table = img.copyExpandCanvas(
+      table,
+      newWidth: table.width + 24,
+      newHeight: table.height + 24,
+      position: img.ExpandCanvasPosition.center,
+      backgroundColor: img.ColorRgb8(255, 255, 255),
+    );
 
-        // Row crops are short; width-based enlargement makes Arabic labels and
-        // minute-only cells much easier for Tesseract to read.
-        if (row.width < 2400) {
-          row = img.copyResize(
-            row,
-            width: 2400,
-            interpolation: img.Interpolation.linear,
-          );
-        }
-        row = img.grayscale(row);
-        rowIndex++;
-        files.add(await _writeTemp(row, 'munib_ocr_row_$rowIndex'));
-      }
-    } else {
-      // Fallback: use many small overlapping horizontal bands rather than four
-      // huge chunks. Each band contains roughly 2-3 timetable rows.
-      const bandCount = 12;
-      const overlapRatio = 0.18;
-      final nominal = body.height / bandCount;
+    table = _resizeToWidth(table, 3000);
 
-      for (var i = 0; i < bandCount; i++) {
-        final baseTop = (i * nominal).round();
-        final overlap = (nominal * overlapRatio).round();
-        final y = (baseTop - (i == 0 ? 0 : overlap)).clamp(0, body.height - 1);
-        final nextBase = ((i + 1) * nominal).round();
-        final end = (nextBase + (i == bandCount - 1 ? 0 : overlap))
-            .clamp(y + 1, body.height);
-
-        var band = img.copyCrop(
-          body,
-          x: 0,
-          y: y,
-          width: body.width,
-          height: end - y,
-        );
-        if (band.width < 2200) {
-          band = img.copyResize(
-            band,
-            width: 2200,
-            interpolation: img.Interpolation.linear,
-          );
-        }
-        band = img.grayscale(band);
-        files.add(await _writeTemp(band, 'munib_ocr_band_${i + 1}'));
-      }
-    }
-
-    return files;
+    return [
+      await _writeTemp(context, 'munib_ocr_context'),
+      await _writeTemp(table, 'munib_ocr_clean_table'),
+    ];
   }
 
-  List<int> _detectHorizontalSeparators(img.Image image) {
-    final candidateYs = <int>[];
-    final sampleStep = image.width > 1200 ? 4 : 2;
-    final samples = (image.width / sampleStep).ceil();
+  // Kept for compatibility with older callers.
+  Future<List<File>> prepareMonthlyOcrParts(File original) =>
+      prepareTableOcrParts(original);
+
+  _TableBounds _chooseTableBounds(img.Image image, List<int> rules) {
+    final minY = (image.height * 0.22).round();
+    final usable = rules.where((y) => y >= minY).toList();
+
+    int top;
+    int bottom;
+
+    if (usable.length >= 8) {
+      top = (usable.first - 6).clamp(0, image.height - 2);
+      bottom = (usable.last + 6).clamp(top + 1, image.height);
+    } else {
+      // Safe fallback for portrait Imsakia posters.
+      top = (image.height * 0.30).round();
+      bottom = (image.height * 0.96).round();
+    }
+
+    final left = (image.width * 0.018).round();
+    final right = (image.width * 0.982).round();
+
+    return _TableBounds(
+      left: left,
+      top: top,
+      width: (right - left).clamp(1, image.width - left),
+      height: (bottom - top).clamp(1, image.height - top),
+    );
+  }
+
+  List<int> _detectHorizontalRules(img.Image image) {
+    final candidates = <int>[];
+    final xStart = (image.width * 0.03).round();
+    final xEnd = (image.width * 0.97).round();
+    const step = 3;
+    final sampleCount = ((xEnd - xStart) / step).ceil();
 
     for (var y = 0; y < image.height; y++) {
       var dark = 0;
-      for (var x = 0; x < image.width; x += sampleStep) {
+      for (var x = xStart; x < xEnd; x += step) {
         final p = image.getPixel(x, y);
-        final lum = (p.r.toDouble() + p.g.toDouble() + p.b.toDouble()) / 3.0;
-        if (lum < 155) dark++;
+        if (_luminance(p) < 165) dark++;
       }
-
-      // Text occupies limited horizontal area; a table rule generally spans a
-      // large portion of the poster width.
-      if (dark / samples >= 0.42) {
-        candidateYs.add(y);
+      if (sampleCount > 0 && dark / sampleCount >= 0.24) {
+        candidates.add(y);
       }
     }
 
-    if (candidateYs.isEmpty) return const [];
+    return _groupPositions(candidates, maxGap: 3);
+  }
 
-    final grouped = <List<int>>[];
-    var current = <int>[candidateYs.first];
-    for (var i = 1; i < candidateYs.length; i++) {
-      if (candidateYs[i] - candidateYs[i - 1] <= 2) {
-        current.add(candidateYs[i]);
+  List<int> _detectVerticalRules(img.Image image) {
+    final candidates = <int>[];
+    final yStart = (image.height * 0.02).round();
+    final yEnd = (image.height * 0.98).round();
+    const step = 3;
+    final sampleCount = ((yEnd - yStart) / step).ceil();
+
+    for (var x = 0; x < image.width; x++) {
+      var dark = 0;
+      for (var y = yStart; y < yEnd; y += step) {
+        final p = image.getPixel(x, y);
+        if (_luminance(p) < 90) dark++;
+      }
+      if (sampleCount > 0 && dark / sampleCount >= 0.48) {
+        candidates.add(x);
+      }
+    }
+
+    return _groupPositions(candidates, maxGap: 3);
+  }
+
+  List<int> _groupPositions(List<int> values, {required int maxGap}) {
+    if (values.isEmpty) return const [];
+    final groups = <List<int>>[];
+    var current = <int>[values.first];
+
+    for (var i = 1; i < values.length; i++) {
+      if (values[i] - values[i - 1] <= maxGap) {
+        current.add(values[i]);
       } else {
-        grouped.add(current);
-        current = <int>[candidateYs[i]];
+        groups.add(current);
+        current = <int>[values[i]];
       }
     }
-    grouped.add(current);
+    groups.add(current);
 
-    return grouped
-        .map((group) => group[group.length ~/ 2])
-        .where((y) => y > 2 && y < image.height - 2)
-        .toList();
+    return groups.map((g) => g[g.length ~/ 2]).toList();
   }
 
-  List<(int, int)> _rowRangesFromSeparators(
-    int imageHeight,
-    List<int> separators,
-  ) {
-    if (separators.length < 4) return const [];
-
-    final ranges = <(int, int)>[];
-    for (var i = 0; i < separators.length - 1; i++) {
-      final top = separators[i] + 1;
-      final bottom = separators[i + 1] - 1;
-      final height = bottom - top;
-
-      // Reject separator noise and giant decorative/header regions.
-      if (height >= 12 && height <= imageHeight * 0.12) {
-        ranges.add((top, height));
+  void _eraseHorizontalRules(img.Image image, List<int> rules) {
+    for (final y0 in rules) {
+      for (var y = (y0 - 2).clamp(0, image.height - 1);
+          y <= (y0 + 2).clamp(0, image.height - 1);
+          y++) {
+        for (var x = 0; x < image.width; x++) {
+          image.setPixelRgb(x, y, 255, 255, 255);
+        }
       }
     }
-    return ranges;
   }
 
-  img.Image _resizeForOcr(
-    img.Image image, {
-    required int targetLongEdge,
-  }) {
-    final longEdge = image.width > image.height ? image.width : image.height;
-    if (longEdge <= targetLongEdge && longEdge >= 1400) return image;
+  void _eraseVerticalRules(img.Image image, List<int> rules) {
+    for (final x0 in rules) {
+      for (var x = (x0 - 2).clamp(0, image.width - 1);
+          x <= (x0 + 2).clamp(0, image.width - 1);
+          x++) {
+        for (var y = 0; y < image.height; y++) {
+          image.setPixelRgb(x, y, 255, 255, 255);
+        }
+      }
+    }
+  }
 
-    final scale = targetLongEdge / longEdge;
+  img.Image _binary(img.Image source, {required int threshold}) {
+    final out = source.clone();
+    for (var y = 0; y < out.height; y++) {
+      for (var x = 0; x < out.width; x++) {
+        final p = out.getPixel(x, y);
+        final v = _luminance(p) < threshold ? 0 : 255;
+        out.setPixelRgb(x, y, v, v, v);
+      }
+    }
+    return out;
+  }
+
+  double _luminance(img.Pixel p) =>
+      (p.r.toDouble() * 0.299) +
+      (p.g.toDouble() * 0.587) +
+      (p.b.toDouble() * 0.114);
+
+  img.Image _resizeToWidth(img.Image image, int targetWidth) {
+    if (image.width >= targetWidth) return image;
     return img.copyResize(
       image,
-      width: (image.width * scale).round(),
-      height: (image.height * scale).round(),
-      interpolation: img.Interpolation.linear,
+      width: targetWidth,
+      interpolation: img.Interpolation.cubic,
     );
   }
 
@@ -235,4 +227,18 @@ class ImagePreprocessor {
     await output.writeAsBytes(img.encodePng(image), flush: true);
     return output;
   }
+}
+
+class _TableBounds {
+  const _TableBounds({
+    required this.left,
+    required this.top,
+    required this.width,
+    required this.height,
+  });
+
+  final int left;
+  final int top;
+  final int width;
+  final int height;
 }
