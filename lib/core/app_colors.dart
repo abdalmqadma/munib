@@ -1,24 +1,37 @@
 import 'package:flutter/material.dart';
 
 /// Single source of truth for Munib's visual system.
-///
-/// Do not hard-code app colors inside screens/widgets. Add semantic colors here
-/// and consume them directly or through [Theme.of(context).colorScheme].
+/// Do not hard-code app colors inside screens/widgets.
 class AppColors {
   AppColors._();
 
-  // Core canvas
+  // Dark theme
   static const Color background = Color(0xFF09131D);
   static const Color backgroundDeep = Color(0xFF071019);
   static const Color surface = Color(0xFF102131);
   static const Color surfaceElevated = Color(0xFF152838);
   static const Color surfaceSoft = Color(0xFF1A2D3D);
-
-  // Reference-design glass treatment
-  static const Color glass = Color(0x141FFFFFF);
+  static const Color glass = Color(0x14FFFFFF);
   static const Color glassStrong = Color(0x1FFFFFFF);
   static const Color border = Color(0x1AFFFFFF);
   static const Color divider = Color(0x12FFFFFF);
+  static const Color textPrimary = Color(0xFFF3EFE7);
+  static const Color textSecondary = Color(0xFFA9B0B5);
+  static const Color textMuted = Color(0xFF697783);
+  static const Color textDisabled = Color(0xFF45535E);
+
+  // Light theme
+  static const Color lightBackground = Color(0xFFF4F1EA);
+  static const Color lightBackgroundDeep = Color(0xFFECE7DD);
+  static const Color lightSurface = Color(0xFFFFFFFF);
+  static const Color lightSurfaceElevated = Color(0xFFF8F5EF);
+  static const Color lightSurfaceSoft = Color(0xFFEAE4D9);
+  static const Color lightGlass = Color(0xBFFFFFFF);
+  static const Color lightBorder = Color(0x1F102131);
+  static const Color lightDivider = Color(0x14102131);
+  static const Color lightTextPrimary = Color(0xFF17232D);
+  static const Color lightTextSecondary = Color(0xFF586570);
+  static const Color lightTextMuted = Color(0xFF83909A);
 
   // Brand accent
   static const Color gold = Color(0xFFD9AD68);
@@ -31,17 +44,9 @@ class AppColors {
   static const Color red = Color(0xFFE46C64);
   static const Color success = Color(0xFF65A98A);
 
-  // Text hierarchy
-  static const Color textPrimary = Color(0xFFF3EFE7);
-  static const Color textSecondary = Color(0xFFA9B0B5);
-  static const Color textMuted = Color(0xFF697783);
-  static const Color textDisabled = Color(0xFF45535E);
-
-  // Compatibility aliases used by existing widgets.
   static const Color primary = gold;
   static const Color accent = gold;
 
-  // Home/background gradients based on the supplied Munib reference.
   static const List<Color> nightGradient = [
     Color(0xFF17242B),
     Color(0xFF0B1825),
@@ -68,11 +73,7 @@ class AppColors {
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [
-      Color(0xFF17394D),
-      Color(0xFF113247),
-      Color(0xFF102739),
-    ],
+    colors: [Color(0xFF17394D), Color(0xFF113247), Color(0xFF102739)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
@@ -100,7 +101,5 @@ class AppColors {
     return heroGradient;
   }
 
-  static LinearGradient getGradientForTime(String prayer) {
-    return getHeroGradient(prayer);
-  }
+  static LinearGradient getGradientForTime(String prayer) => getHeroGradient(prayer);
 }
