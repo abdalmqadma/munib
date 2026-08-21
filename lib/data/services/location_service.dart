@@ -1,46 +1,63 @@
-import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
+
+class MunibLocation {
+  final double latitude;
+  final double longitude;
+  final String city;
+
+  const MunibLocation({
+    required this.latitude,
+    required this.longitude,
+    required this.city,
+  });
+}
 
 class LocationService {
-  Future<String> getCurrentCity() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return "Location disabled";
+  Future<MunibLocation> getCurrentLocation() async {
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw Exception('location_service_disabled');
     }
 
-    permission = await Geolocator.checkPermission();
+    var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return "Permission denied";
-      }
     }
-    
+    if (permission == LocationPermission.denied) {
+      throw Exception('location_permission_denied');
+    }
     if (permission == LocationPermission.deniedForever) {
-      return "Permission denied forever";
-    } 
-
-    try {
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
-        timeLimit: const Duration(seconds: 5),
-      );
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        position.latitude, 
-        position.longitude
-      );
-
-      if (placemarks.isNotEmpty) {
-        Placemark place = placemarks[0];
-        return "${place.locality}, ${place.country}";
-      }
-    } catch (e) {
-      return "Error fetching location";
+      throw Exception('location_permission_denied_forever');
     }
-    
-    return "Unknown Location";
+
+    final position = await Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.medium,
+        timeLimit: Duration(seconds: 15),
+      ),
+    );
+
+    String city = '${position.latitude.toStringAsFixed(3)}, ${position.longitude.toStringAsFixed(3)}';
+    try {
+      final places = await placemarkFromCoordinates(position.latitude, position.longitude);
+      if (places.isNotEmpty) {
+        final place = places.first;
+        final locality = (place.locality?.trim().isNotEmpty ?? false)
+            ? place.locality!.trim()
+            : (place.administrativeArea?.trim() ?? '');
+        final country = place.country?.trim() ?? '';
+        city = [locality, country].where((e) => e.isNotEmpty).join(', ');
+      }
+    } catch (_) {
+      // Coordinates are still valid even if reverse geocoding is unavailable.
+    }
+
+    return MunibLocation(
+      latitude: position.latitude,
+      longitude: position.longitude,
+      city: city,
+    );
   }
+
+  Future<String> getCurrentCity() async => (await getCurrentLocation()).city;
 }
