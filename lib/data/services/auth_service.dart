@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -7,83 +9,90 @@ class AuthService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // مراقبة حالة المستخدم
   Stream<User?> get user => _auth.authStateChanges();
 
-  // تسجيل مستخدم جديد بالبريد
   Future<User?> registerWithEmail(String email, String password, String name) async {
     try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-        email: email, 
-        password: password
+      final result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
       );
-      User? user = result.user;
-      
+      final user = result.user;
+
       if (user != null) {
-        await _firestore.collection('users').doc(user.uid).set({
-          'name': name,
-          'email': email,
-          'created_at': FieldValue.serverTimestamp(),
-          'score': 0,
-        });
+        final trimmedName = name.trim();
+        if (trimmedName.isNotEmpty) {
+          await user.updateDisplayName(trimmedName);
+          await user.reload();
+        }
+
+        unawaited(
+          _firestore.collection('users').doc(user.uid).set({
+            'name': trimmedName,
+            'email': email,
+            'created_at': FieldValue.serverTimestamp(),
+            'score': 0,
+          }, SetOptions(merge: true)).timeout(const Duration(seconds: 8)).catchError((_) {}),
+        );
+
+        return FirebaseAuth.instance.currentUser;
       }
-      return user;
-    } catch (e) {
+
+      return null;
+    } on FirebaseAuthException {
       return null;
     }
   }
 
-  // تسجيل الدخول بالبريد
   Future<User?> signInWithEmail(String email, String password) async {
     try {
-      UserCredential result = await _auth.signInWithEmailAndPassword(
-        email: email, 
-        password: password
-      );
+      final result = await _auth
+          .signInWithEmailAndPassword(email: email, password: password)
+          .timeout(const Duration(seconds: 15));
       return result.user;
-    } catch (e) {
+    } on FirebaseAuthException {
+      return null;
+    } on TimeoutException {
       return null;
     }
   }
 
-  // تسجيل الدخول بواسطة جوجل
   Future<User?> signInWithGoogle() async {
     try {
-      // 1. بدء عملية الدخول
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) {
-        print("DEBUG: Google User is null (User cancelled)");
-        return null;
-      }
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
 
-      // 2. الحصول على بيانات المصادقة
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
-      // 3. إنشاء اعتماد Firebase
-      final AuthCredential credential = GoogleAuthProvider.credential(
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // 4. تسجيل الدخول في Firebase
-      UserCredential result = await _auth.signInWithCredential(credential);
-      User? user = result.user;
+      final result = await _auth
+          .signInWithCredential(credential)
+          .timeout(const Duration(seconds: 15));
+      final user = result.user;
 
       if (user != null) {
-        await _firestore.collection('users').doc(user.uid).set({
-          'name': user.displayName,
-          'email': user.email,
-          'last_login': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        unawaited(
+          _firestore.collection('users').doc(user.uid).set({
+            'name': user.displayName,
+            'email': user.email,
+            'last_login': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true)).timeout(const Duration(seconds: 8)).catchError((_) {}),
+        );
       }
+
       return user;
-    } catch (e) {
-      print("DEBUG: Google Login Error Detailed: $e");
+    } on FirebaseAuthException {
+      return null;
+    } on TimeoutException {
+      return null;
+    } catch (_) {
       return null;
     }
   }
 
-  // تسجيل الخروج
   Future<void> signOut() async {
     await _googleSignIn.signOut();
     await _auth.signOut();

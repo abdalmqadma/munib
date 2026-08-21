@@ -1,13 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:file_picker/file_picker.dart';
-import '../../data/services/ocr_service.dart';
+
 import '../../data/services/ai_service.dart';
+import '../../data/services/ocr_service.dart';
 import 'review_screen.dart';
-import 'dart:io';
-import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -19,124 +19,116 @@ class UploadScreen extends StatefulWidget {
 class _UploadScreenState extends State<UploadScreen> {
   bool _isLoading = false;
   int _loadingStep = 0;
+  bool _hasError = false;
   final OCRService _ocrService = OCRService();
   final AIService _aiService = AIService();
 
   Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
     );
 
-    if (result != null && result.files.single.path != null) {
-      _processFile(XFile(result.files.single.path!));
+    final path = result?.files.single.path;
+    if (path != null) {
+      await _processFile(XFile(path));
     }
   }
 
   Future<void> _processImage(ImageSource source) async {
     final picker = ImagePicker();
-    // رفع الجودة قليلاً لضمان وضوح الأرقام للـ AI
     final image = await picker.pickImage(
       source: source,
-      maxWidth: 800, // تقليل العرض لسهولة النقل عبر المحاكي
-      maxHeight: 800,
-      imageQuality: 70, // تقليل الجودة لضمان عبورها من الشبكة
+      maxWidth: 2400,
+      maxHeight: 2400,
+      imageQuality: 100,
     );
-    if (image != null) _processFile(image);
+    if (image != null) {
+      await _processFile(image);
+    }
   }
 
   Future<void> _processFile(XFile file) async {
     setState(() {
       _isLoading = true;
+      _hasError = false;
       _loadingStep = 1;
     });
 
     try {
-      File fileToProcess = File(file.path);
-      
-      // ضغط الصورة إذا لزم الأمر قبل إرسالها لـ Groq
-      if (!file.path.toLowerCase().endsWith('.pdf')) {
-        fileToProcess = await _compressImageIfNeeded(fileToProcess);
-      }
+      final inputFile = File(file.path);
+      final isPdf = file.path.toLowerCase().endsWith('.pdf');
+      final fileSize = await inputFile.length();
+      debugPrint('[MUNIB] Processing started: ${file.path}');
+      debugPrint('[MUNIB] Input type: ${isPdf ? 'PDF' : 'IMAGE'}, bytes: $fileSize');
 
-      await Future.delayed(const Duration(milliseconds: 800));
       setState(() => _loadingStep = 2);
-      
-      List<Map<String, dynamic>> structuredData;
-      
-      if (file.path.toLowerCase().endsWith('.pdf')) {
-        final text = await _ocrService.extractText(XFile(fileToProcess.path));
-        setState(() => _loadingStep = 3);
-        structuredData = await _aiService.structurePrayerTimes(text);
-      } else {
-        await Future.delayed(const Duration(milliseconds: 500));
-        setState(() => _loadingStep = 3);
-        // التعديل هنا: استخدام الملف المكبوس بدلاً من fileToProcess القديم
-        final compressedFile = await _compressImageIfNeeded(fileToProcess);
-        structuredData = await _aiService.structurePrayerTimesFromImage(compressedFile);
-      }
-      
-      setState(() => _loadingStep = 4);
-      await Future.delayed(const Duration(milliseconds: 500));
+      debugPrint('[MUNIB] OCR START');
+      final ocrWatch = Stopwatch()..start();
 
-      if (mounted) {
-        if (structuredData.isEmpty) {
-          _showErrorUI();
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ReviewScreen(initialData: structuredData),
-            ),
-          );
-        }
+      final rawOcrText = await (isPdf
+              ? _ocrService.extractTextFromPdf(inputFile)
+              : _ocrService.extractText(file))
+          .timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw TimeoutException('OCR timed out after 90 seconds'),
+      );
+
+      ocrWatch.stop();
+      debugPrint('[MUNIB] OCR FINISHED in ${ocrWatch.elapsedMilliseconds} ms');
+      debugPrint('[MUNIB] OCR characters: ${rawOcrText.length}');
+      final preview = rawOcrText.replaceAll(RegExp(r'\s+'), ' ').trim();
+      debugPrint('[MUNIB] OCR preview: ${preview.length > 500 ? preview.substring(0, 500) : preview}');
+
+      if (rawOcrText.trim().isEmpty) {
+        throw Exception('OCR returned no text');
       }
-    } catch (e) {
+
+      setState(() => _loadingStep = 3);
+      debugPrint('[MUNIB] AI START');
+      final aiWatch = Stopwatch()..start();
+      final structuredData = await _aiService
+          .structurePrayerTimes(rawOcrText)
+          .timeout(
+        const Duration(seconds: 60),
+        onTimeout: () => throw TimeoutException('AI request timed out after 60 seconds'),
+      );
+      aiWatch.stop();
+      debugPrint('[MUNIB] AI FINISHED in ${aiWatch.elapsedMilliseconds} ms');
+      debugPrint('[MUNIB] AI returned ${structuredData.length} prayer day(s)');
+
+      setState(() => _loadingStep = 4);
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (!mounted) return;
+
+      if (structuredData.isEmpty) {
+        debugPrint('[MUNIB] Processing failed: AI returned an empty prayer-day list');
+        _showErrorUI();
+        return;
+      }
+
+      debugPrint('[MUNIB] Processing successful; opening review screen');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ReviewScreen(initialData: structuredData),
+        ),
+      );
+    } on TimeoutException catch (e) {
+      debugPrint('[MUNIB] TIMEOUT: $e');
+      if (mounted) _showErrorUI();
+    } catch (e, stackTrace) {
+      debugPrint('[MUNIB] Imsakia processing failed: $e');
+      debugPrint('[MUNIB] Stack trace: $stackTrace');
       if (mounted) _showErrorUI();
     } finally {
-      if (mounted && !_hasError) setState(() => _isLoading = false);
+      if (mounted && !_hasError) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  Future<File> _compressImageIfNeeded(File original) async {
-    final sizeInBytes = await original.length();
-    const maxAllowedBytes = 3 * 1024 * 1024; // هامش أمان تحت حد الـ 4MB
-
-    if (sizeInBytes <= maxAllowedBytes) return original;
-
-    print("Compressing image... current size: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(2)} MB");
-
-    final bytes = await original.readAsBytes();
-    final decoded = img.decodeImage(bytes);
-    if (decoded == null) return original;
-
-    img.Image resized = decoded;
-    if (decoded.width > 1600 || decoded.height > 1600) {
-      resized = img.copyResize(
-        decoded,
-        width: decoded.width >= decoded.height ? 1600 : null,
-        height: decoded.height > decoded.width ? 1600 : null,
-      );
-    }
-
-    int quality = 85;
-    List<int> outputBytes = img.encodeJpg(resized, quality: quality);
-    while (outputBytes.length > maxAllowedBytes && quality > 30) {
-      quality -= 10;
-      outputBytes = img.encodeJpg(resized, quality: quality);
-    }
-
-    final tempDir = await getTemporaryDirectory();
-    final compressedFile = File(
-      '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
-    await compressedFile.writeAsBytes(outputBytes);
-    
-    print("New size: ${(outputBytes.length / (1024 * 1024)).toStringAsFixed(2)} MB");
-    return compressedFile;
-  }
-
-  bool _hasError = false;
   void _showErrorUI() {
     setState(() {
       _hasError = true;
@@ -149,9 +141,9 @@ class _UploadScreenState extends State<UploadScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF071019),
       body: SafeArea(
-        child: _hasError 
-          ? _buildErrorContent() 
-          : (_isLoading ? _buildLoading() : _buildContent()),
+        child: _hasError
+            ? _buildErrorContent()
+            : (_isLoading ? _buildLoading() : _buildContent()),
       ),
     );
   }
@@ -192,7 +184,7 @@ class _UploadScreenState extends State<UploadScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'الصورة غير واضحة. حاول بصورة أوضح مع إضاءة جيدة',
+              'تعذر استخراج بيانات كافية. حاول بصورة أوضح مع إضاءة جيدة',
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white38, fontSize: 16, height: 1.5),
             ),
@@ -223,7 +215,6 @@ class _UploadScreenState extends State<UploadScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Robot Avatar
             Container(
               width: 150,
               height: 150,
@@ -249,16 +240,11 @@ class _UploadScreenState extends State<UploadScreen> {
               style: TextStyle(color: Colors.white38, fontSize: 16),
             ),
             const SizedBox(height: 50),
-            
-            // Steps
-            _buildLoadingStep(1, "قراءة الصورة", _loadingStep),
-            _buildLoadingStep(2, "اكتشاف الجدول", _loadingStep),
-            _buildLoadingStep(3, "فهم الجدول وتحليله", _loadingStep),
-            _buildLoadingStep(4, "تجهيز أوقات الصلاة", _loadingStep),
-
+            _buildLoadingStep(1, 'قراءة الصورة', _loadingStep),
+            _buildLoadingStep(2, 'استخراج النص العربي', _loadingStep),
+            _buildLoadingStep(3, 'فهم الجدول وتحليله', _loadingStep),
+            _buildLoadingStep(4, 'تجهيز أوقات الصلاة', _loadingStep),
             const SizedBox(height: 50),
-            
-            // Progress Bar
             Column(
               children: [
                 ClipRRect(
@@ -272,7 +258,7 @@ class _UploadScreenState extends State<UploadScreen> {
                 ),
                 const SizedBox(height: 15),
                 Text(
-                  "${(_loadingStep / 4 * 100).toInt()}%",
+                  '${(_loadingStep / 4 * 100).toInt()}%',
                   style: const TextStyle(color: Colors.white24, fontSize: 14),
                 ),
               ],
@@ -284,8 +270,8 @@ class _UploadScreenState extends State<UploadScreen> {
   }
 
   Widget _buildLoadingStep(int step, String title, int currentStep) {
-    bool isDone = currentStep > step;
-    bool isCurrent = currentStep == step;
+    final isDone = currentStep > step;
+    final isCurrent = currentStep == step;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -308,8 +294,24 @@ class _UploadScreenState extends State<UploadScreen> {
           ),
           const SizedBox(width: 15),
           if (isDone) const Icon(Icons.check, color: Colors.blue, size: 18),
-          if (isCurrent) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.amber))),
-          if (!isDone && !isCurrent) Container(width: 18, height: 18, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white10, width: 2))),
+          if (isCurrent)
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(Colors.amber),
+              ),
+            ),
+          if (!isDone && !isCurrent)
+            Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white10, width: 2),
+              ),
+            ),
         ],
       ),
     );
@@ -318,7 +320,6 @@ class _UploadScreenState extends State<UploadScreen> {
   Widget _buildContent() {
     return Column(
       children: [
-        // Header
         Padding(
           padding: const EdgeInsets.all(20.0),
           child: Row(
@@ -338,18 +339,16 @@ class _UploadScreenState extends State<UploadScreen> {
                 'رفع الإمساكية',
                 style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(width: 48), // Spacer
+              const SizedBox(width: 48),
             ],
           ),
         ),
-
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 30),
             child: Column(
               children: [
                 const SizedBox(height: 20),
-                // Drop Zone Box
                 GestureDetector(
                   onTap: _pickFile,
                   child: Container(
@@ -361,7 +360,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       border: Border.all(
                         color: Colors.blue.withOpacity(0.3),
                         width: 2,
-                        style: BorderStyle.solid, // Custom dashed borders are tricky in Flutter without packages
+                        style: BorderStyle.solid,
                       ),
                     ),
                     child: Column(
@@ -387,12 +386,9 @@ class _UploadScreenState extends State<UploadScreen> {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 20),
                 const Text('أو', style: TextStyle(color: Colors.white24, fontSize: 16)),
                 const SizedBox(height: 20),
-
-                // Action Buttons Grid
                 Row(
                   children: [
                     Expanded(child: _buildActionBtn('PDF', Icons.picture_as_pdf, _pickFile)),
@@ -402,9 +398,7 @@ class _UploadScreenState extends State<UploadScreen> {
                     Expanded(child: _buildActionBtn('الكاميرا', Icons.camera_alt, () => _processImage(ImageSource.camera))),
                   ],
                 ),
-
                 const SizedBox(height: 40),
-                // Bottom Hint
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                   decoration: BoxDecoration(
