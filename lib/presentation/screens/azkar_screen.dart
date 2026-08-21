@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../core/app_strings.dart';
 import '../../data/services/azkar_data.dart';
 import '../providers/prayer_provider.dart';
 
@@ -9,53 +11,39 @@ class AzkarScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PrayerProvider>();
-    final isEn = provider.language == 'English';
+    final isEn = provider.isEnglish;
+    final theme = Theme.of(context);
 
     return DefaultTabController(
       length: 4,
       child: Scaffold(
-        backgroundColor: provider.isDarkMode ? const Color(0xFF071019) : const Color(0xFFF5F7FA),
         appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
           automaticallyImplyLeading: false,
-          title: Padding(
-            padding: const EdgeInsets.only(top: 20),
-            child: Row(
-              mainAxisAlignment: isEn ? MainAxisAlignment.start : MainAxisAlignment.end,
-              children: [
-                Text(
-                  isEn ? 'Azkar' : 'الأذكار',
-                  style: TextStyle(
-                    color: provider.isDarkMode ? Colors.white : Colors.black87,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
+          title: Text(
+            context.tr('azkar'),
+            style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           bottom: TabBar(
             isScrollable: true,
-            labelColor: const Color(0xFFFFD166),
-            unselectedLabelColor: Colors.white24,
-            indicatorColor: Colors.transparent,
+            labelColor: theme.colorScheme.primary,
+            unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+            indicatorColor: theme.colorScheme.primary,
             dividerColor: Colors.transparent,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             tabs: [
               _AzkarTab(title: isEn ? 'Morning' : 'الصباح'),
               _AzkarTab(title: isEn ? 'Evening' : 'المساء'),
-              _AzkarTab(title: isEn ? 'Prayers' : 'بعد الصلاة'),
+              _AzkarTab(title: isEn ? 'After Prayer' : 'بعد الصلاة'),
               _AzkarTab(title: isEn ? 'Sleep' : 'النوم'),
             ],
           ),
         ),
         body: TabBarView(
           children: [
-            AzkarList(category: "Morning", isEn: isEn),
-            AzkarList(category: "Evening", isEn: isEn),
-            AzkarList(category: "After Prayer", isEn: isEn),
-            AzkarList(category: "Sleep", isEn: isEn),
+            AzkarList(category: 'Morning', isEn: isEn),
+            AzkarList(category: 'Evening', isEn: isEn),
+            AzkarList(category: 'After Prayer', isEn: isEn),
+            AzkarList(category: 'Sleep', isEn: isEn),
           ],
         ),
       ),
@@ -71,12 +59,12 @@ class _AzkarTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tab(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.white10),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Theme.of(context).colorScheme.outline),
         ),
-        child: Center(child: Text(title, style: const TextStyle(fontSize: 16))),
+        child: Text(title),
       ),
     );
   }
@@ -90,13 +78,10 @@ class AzkarList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final azkarData = AzkarData.allAzkar[category] ?? [];
-
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: azkarData.length,
-      itemBuilder: (context, index) {
-        return AzkarCard(azkar: azkarData[index], isEn: isEn);
-      },
+      itemBuilder: (context, index) => AzkarCard(azkar: azkarData[index], isEn: isEn),
     );
   }
 }
@@ -115,71 +100,63 @@ class _AzkarCardState extends State<AzkarCard> {
 
   @override
   Widget build(BuildContext context) {
-    final provider = context.watch<PrayerProvider>();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final bool isCompleted = _currentCount >= widget.azkar['count'];
-    final isDark = provider.isDarkMode;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(25),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: isCompleted ? const Color(0xFFFFD166).withValues(alpha: 0.2) : Colors.white10,
+          color: isCompleted ? scheme.primary.withValues(alpha: .45) : scheme.outline,
         ),
-        boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
       ),
       child: Column(
         children: [
           Text(
             widget.azkar['text'],
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: isDark ? Colors.white : Colors.black87,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              height: 1.5,
-            ),
+            style: theme.textTheme.titleLarge?.copyWith(height: 1.6, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 10),
           Text(
             widget.isEn ? (isCompleted ? 'Completed' : 'Once') : widget.azkar['subtitle'],
-            style: TextStyle(
-              color: isCompleted ? const Color(0xFFFFD166) : Colors.white24,
-              fontSize: 14,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: isCompleted ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 22),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  _buildSmallIcon(Icons.hexagon_outlined),
-                  const SizedBox(width: 12),
-                  _buildSmallIcon(Icons.favorite_border, color: Colors.orangeAccent),
-                ],
-              ),
+              _smallIcon(context, Icons.hexagon_outlined),
+              const SizedBox(width: 10),
+              _smallIcon(context, Icons.favorite_border),
+              const Spacer(),
               if (!isCompleted)
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
-                    borderRadius: BorderRadius.circular(20),
+                    color: scheme.surfaceContainerHighest.withValues(alpha: .55),
+                    borderRadius: BorderRadius.circular(18),
                   ),
                   child: Row(
                     children: [
-                      _buildCounterBtn(Icons.remove, () {
+                      _counterBtn(context, Icons.remove, () {
                         if (_currentCount > 0) setState(() => _currentCount--);
                       }),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 15),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
                         child: Text(
                           '$_currentCount',
-                          style: const TextStyle(color: Color(0xFFFFD166), fontSize: 22, fontWeight: FontWeight.bold),
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                      _buildCounterBtn(Icons.add, () {
+                      _counterBtn(context, Icons.add, () {
                         if (_currentCount < widget.azkar['count']) setState(() => _currentCount++);
                       }),
                     ],
@@ -187,15 +164,15 @@ class _AzkarCardState extends State<AzkarCard> {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFD166).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFFFD166).withValues(alpha: 0.3)),
+                    color: scheme.primary.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: scheme.primary.withValues(alpha: .3)),
                   ),
                   child: Text(
                     "${widget.azkar['count']}/${widget.azkar['count']} ✓",
-                    style: const TextStyle(color: Color(0xFFFFD166), fontSize: 16, fontWeight: FontWeight.bold),
+                    style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary),
                   ),
                 ),
             ],
@@ -205,27 +182,26 @@ class _AzkarCardState extends State<AzkarCard> {
     );
   }
 
-  Widget _buildSmallIcon(IconData icon, {Color color = Colors.white38}) {
+  Widget _smallIcon(BuildContext context, IconData icon) {
+    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: scheme.primary.withValues(alpha: .08),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(icon, color: color, size: 20),
+      child: Icon(icon, color: scheme.onSurfaceVariant, size: 20),
     );
   }
 
-  Widget _buildCounterBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
+  Widget _counterBtn(BuildContext context, IconData icon, VoidCallback onTap) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
       onTap: onTap,
-      child: Container(
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
         padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E88E5),
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Icon(icon, color: Colors.white, size: 20),
+        child: Icon(icon, color: scheme.primary, size: 20),
       ),
     );
   }
