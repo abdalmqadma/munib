@@ -1,6 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../core/app_strings.dart';
 import '../providers/prayer_coach_provider.dart';
+import 'auth_screen.dart';
 import 'prayer_coach/training_screen.dart';
 
 class WidgetPreviewScreen extends StatelessWidget {
@@ -8,35 +12,35 @@ class WidgetPreviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF071019),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(25.0),
+          padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'اختر الصلاة',
-                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+              Text(
+                context.tr('choosePrayer'),
+                style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
-              const Text(
-                'اختر الصلاة التي تريد تعلمها اليوم',
-                style: TextStyle(color: Colors.white38, fontSize: 16),
-              ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 6),
+              Text(context.tr('choosePrayerSubtitle'), style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 28),
               Expanded(
                 child: GridView.count(
                   crossAxisCount: 2,
-                  mainAxisSpacing: 20,
-                  crossAxisSpacing: 20,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: .95,
                   children: [
-                    _buildPrayerOption(context, 'الفجر', 2, Icons.wb_twilight_rounded),
-                    _buildPrayerOption(context, 'الظهر', 4, Icons.wb_sunny_rounded),
-                    _buildPrayerOption(context, 'العصر', 4, Icons.filter_drama_rounded),
-                    _buildPrayerOption(context, 'المغرب', 3, Icons.wb_twilight_sharp),
-                    _buildPrayerOption(context, 'العشاء', 4, Icons.nightlight_round),
-                    _buildLearningOption(context),
+                    _prayerOption(context, context.tr('fajr'), 2, Icons.wb_twilight_rounded),
+                    _prayerOption(context, context.tr('dhuhr'), 4, Icons.wb_sunny_rounded),
+                    _prayerOption(context, context.tr('asr'), 4, Icons.filter_drama_rounded),
+                    _prayerOption(context, context.tr('maghrib'), 3, Icons.wb_twilight_sharp),
+                    _prayerOption(context, context.tr('isha'), 4, Icons.nightlight_round),
+                    _learningOption(context),
                   ],
                 ),
               ),
@@ -47,54 +51,100 @@ class WidgetPreviewScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildPrayerOption(BuildContext context, String title, int rakahs, IconData icon) {
+  Widget _prayerOption(BuildContext context, String title, int rakahs, IconData icon) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return InkWell(
       onTap: () => _startTraining(context, title, rakahs),
-      borderRadius: BorderRadius.circular(25),
-      child: Container(
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: scheme.outline),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: const Color(0xFFFFD166), size: 40),
-            const SizedBox(height: 15),
-            Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('$rakahs ركعات', style: const TextStyle(color: Colors.white38, fontSize: 14)),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: .12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: scheme.primary, size: 34),
+            ),
+            const SizedBox(height: 14),
+            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('$rakahs ${context.tr('rakahs')}', style: theme.textTheme.bodySmall),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLearningOption(BuildContext context) {
+  Widget _learningOption(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return InkWell(
-      onTap: () => _startTraining(context, 'الأساسيات', 0),
-      borderRadius: BorderRadius.circular(25),
-      child: Container(
+      onTap: () => _startTraining(context, context.tr('learnBasics'), 1),
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [Colors.blue, Color(0xFF1E88E5)]),
-          borderRadius: BorderRadius.circular(25),
+          borderRadius: BorderRadius.circular(24),
+          gradient: LinearGradient(
+            colors: [scheme.primary.withValues(alpha: .28), scheme.surface],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          border: Border.all(color: scheme.primary.withValues(alpha: .35)),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.menu_book_rounded, color: Colors.white, size: 40),
-            const SizedBox(height: 15),
-            Text('تعلم الأساسيات', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('خطوة بخطوة', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            Icon(Icons.menu_book_rounded, color: scheme.primary, size: 38),
+            const SizedBox(height: 14),
+            Text(context.tr('learnBasics'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(context.tr('stepByStep'), style: theme.textTheme.bodySmall),
           ],
         ),
       ),
     );
   }
 
-  void _startTraining(BuildContext context, String prayerName, int rakahs) {
+  Future<void> _startTraining(BuildContext context, String prayerName, int rakahs) async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      final shouldLogin = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          icon: const Icon(Icons.lock_person_rounded),
+          title: Text(context.tr('coachLoginTitle')),
+          content: Text(context.tr('coachLoginBody'), textAlign: TextAlign.center),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(context.tr('cancel')),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(context.tr('continueToLogin')),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldLogin == true && context.mounted) {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+      }
+      if (!context.mounted || FirebaseAuth.instance.currentUser == null) return;
+    }
+
     context.read<PrayerCoachProvider>().startSession(rakahs);
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => TrainingScreen(prayerName: prayerName)),
     );
