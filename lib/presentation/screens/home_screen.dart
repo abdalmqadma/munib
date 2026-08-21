@@ -83,7 +83,7 @@ class _HomeDashboard extends StatelessWidget {
                   subtitle: 'حسب الإمساكية المحفوظة في منيب',
                 ),
                 const SizedBox(height: 12),
-                const PrayerGrid(),
+                PrayerGrid(),
                 const SizedBox(height: 22),
                 const _ProtectedDataCard(),
                 const SizedBox(height: 18),
