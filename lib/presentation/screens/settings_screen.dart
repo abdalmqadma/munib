@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../core/app_strings.dart';
 import '../providers/prayer_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -8,26 +10,22 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PrayerProvider>();
+    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: provider.isDarkMode ? const Color(0xFF071019) : const Color(0xFFF5F7FA),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(25.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    provider.language == 'English' ? 'Settings' : 'الإعدادات',
-                    style: TextStyle(
-                      color: provider.isDarkMode ? Colors.white : Colors.black87,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold
-                    ),
+              padding: const EdgeInsets.all(25),
+              child: Align(
+                alignment: AlignmentDirectional.centerEnd,
+                child: Text(
+                  context.tr('settings'),
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                ],
+                ),
               ),
             ),
             Expanded(
@@ -35,55 +33,53 @@ class SettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    _buildSettingsCard(context, [
-                      _buildSettingsTile(
+                    _settingsCard(context, [
+                      _tile(
                         context,
-                        title: provider.language == 'English' ? 'Language' : 'لغة التطبيق',
+                        title: context.tr('language'),
                         subtitle: provider.language,
                         icon: Icons.language,
                         onTap: () => _showLanguageDialog(context, provider),
                       ),
-                      _buildDivider(),
-                      _buildSettingsTile(
+                      const Divider(height: 1, indent: 20, endIndent: 20),
+                      _tile(
                         context,
-                        title: provider.language == 'English' ? 'Location' : 'المدينة',
+                        title: context.tr('location'),
                         subtitle: provider.currentCity,
                         icon: Icons.location_city,
-                        onTap: () {}, // Handled by AI fetch usually
+                        onTap: () {},
                       ),
                     ]),
-                    const SizedBox(height: 30),
-                    _buildSettingsCard(context, [
-                      _buildSettingsTile(
+                    const SizedBox(height: 24),
+                    _settingsCard(context, [
+                      _tile(
                         context,
-                        title: provider.language == 'English' ? 'Appearance' : 'مظهر التطبيق',
-                        subtitle: provider.isDarkMode 
-                          ? (provider.language == 'English' ? 'Dark' : 'داكن') 
-                          : (provider.language == 'English' ? 'Light' : 'فاتح'),
+                        title: context.tr('appearance'),
+                        subtitle: provider.isDarkMode ? context.tr('dark') : context.tr('light'),
                         icon: provider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                        onTap: () => provider.updateSetting('isDarkMode', !provider.isDarkMode),
+                        onTap: () => provider.setDarkMode(!provider.isDarkMode),
                       ),
                     ]),
-                    const SizedBox(height: 30),
-                    _buildSettingsCard(context, [
-                      _buildSettingsTile(
+                    const SizedBox(height: 24),
+                    _settingsCard(context, [
+                      _tile(
                         context,
-                        title: provider.language == 'English' ? 'Rate App' : 'تقييم التطبيق',
+                        title: context.tr('rateApp'),
                         icon: Icons.star_outline_rounded,
                         onTap: () {},
                       ),
-                      _buildDivider(),
-                      _buildSettingsTile(
+                      const Divider(height: 1, indent: 20, endIndent: 20),
+                      _tile(
                         context,
-                        title: provider.language == 'English' ? 'Share' : 'مشاركة مع الأصدقاء',
+                        title: context.tr('share'),
                         icon: Icons.share_outlined,
                         onTap: () {},
                       ),
                     ]),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 36),
                     Text(
-                      provider.language == 'English' ? 'Muneeb - v1.0.0' : 'منيب - الإصدار 1.0.0',
-                      style: const TextStyle(color: Colors.white24, fontSize: 12),
+                      context.tr('version'),
+                      style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -96,83 +92,69 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingsCard(BuildContext context, List<Widget> children) {
-    final isDark = context.read<PrayerProvider>().isDarkMode;
+  Widget _settingsCard(BuildContext context, List<Widget> children) {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.03) : Colors.black.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05)),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Column(children: children),
     );
   }
 
-  Widget _buildSettingsTile(
+  Widget _tile(
     BuildContext context, {
     required String title,
     String? subtitle,
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    final provider = context.read<PrayerProvider>();
-    final isDark = provider.isDarkMode;
-    final isEn = provider.language == 'English';
+    final theme = Theme.of(context);
 
     return ListTile(
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
-      leading: Icon(isEn ? Icons.arrow_forward_ios : Icons.arrow_back_ios_new, color: Colors.white24, size: 16),
-      title: Text(
-        title,
-        textAlign: isEn ? TextAlign.start : TextAlign.end,
-        style: TextStyle(color: isDark ? Colors.white : Colors.black87, fontSize: 16, fontWeight: FontWeight.w600),
-      ),
-      subtitle: subtitle != null
-          ? Text(
-              subtitle,
-              textAlign: isEn ? TextAlign.start : TextAlign.end,
-              style: const TextStyle(color: Colors.white38, fontSize: 13),
-            )
-          : null,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      leading: Icon(Icons.chevron_left_rounded, color: theme.colorScheme.onSurfaceVariant),
+      title: Text(title, style: theme.textTheme.titleMedium),
+      subtitle: subtitle == null ? null : Text(subtitle, style: theme.textTheme.bodySmall),
       trailing: Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(9),
         decoration: BoxDecoration(
-          color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.blue.withValues(alpha: 0.1),
+          color: theme.colorScheme.primary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(icon, color: Colors.blueAccent.withValues(alpha: 0.7), size: 22),
+        child: Icon(icon, color: theme.colorScheme.primary, size: 22),
       ),
     );
   }
 
-  Widget _buildDivider() => Divider(color: Colors.white.withValues(alpha: 0.05), height: 1, indent: 20, endIndent: 20);
-
   void _showLanguageDialog(BuildContext context, PrayerProvider provider) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF0B1724),
+      builder: (dialogContext) => AlertDialog(
         title: Text(
-          provider.language == 'English' ? 'Choose Language' : 'اختر اللغة',
+          context.tr('chooseLanguage'),
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: const Text('العربية', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                provider.updateSetting('language', 'العربية');
-                Navigator.pop(context);
+              title: Text(context.tr('arabic')),
+              trailing: provider.languageCode == 'ar' ? const Icon(Icons.check_rounded) : null,
+              onTap: () async {
+                await provider.setLanguage('ar');
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
               },
             ),
             ListTile(
-              title: const Text('English', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                provider.updateSetting('language', 'English');
-                Navigator.pop(context);
+              title: Text(context.tr('english')),
+              trailing: provider.languageCode == 'en' ? const Icon(Icons.check_rounded) : null,
+              onTap: () async {
+                await provider.setLanguage('en');
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
               },
             ),
           ],
