@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
 import 'auth_screen.dart';
+import 'home_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -18,12 +19,24 @@ class ProfileScreen extends StatelessWidget {
       return Scaffold(
         appBar: AppBar(title: Text(context.tr('profile'))),
         body: Center(
-          child: FilledButton(
-            onPressed: () => Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const AuthScreen()),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: FilledButton.icon(
+              onPressed: () async {
+                final ok = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AuthScreen(returnOnSuccess: true)),
+                );
+                if (ok == true && context.mounted) {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
+                  );
+                }
+              },
+              icon: const Icon(Icons.login_rounded),
+              label: Text(context.tr('signIn')),
             ),
-            child: Text(context.tr('signIn')),
           ),
         ),
       );
@@ -97,7 +110,7 @@ class ProfileScreen extends StatelessWidget {
                         await AuthService().signOut();
                         if (!context.mounted) return;
                         Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(builder: (_) => const AuthScreen()),
+                          MaterialPageRoute(builder: (_) => const HomeScreen()),
                           (_) => false,
                         );
                       },
