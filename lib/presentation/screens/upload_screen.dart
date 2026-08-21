@@ -1,13 +1,15 @@
-import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'package:file_picker/file_picker.dart';
-import '../../data/services/ocr_service.dart';
-import '../../data/services/ai_service.dart';
-import 'review_screen.dart';
 import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../../core/app_strings.dart';
+import '../../data/services/ai_service.dart';
+import '../../data/services/ocr_service.dart';
+import 'review_screen.dart';
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
@@ -18,81 +20,78 @@ class UploadScreen extends StatefulWidget {
 
 class _UploadScreenState extends State<UploadScreen> {
   bool _isLoading = false;
+  bool _hasError = false;
   int _loadingStep = 0;
+
   final OCRService _ocrService = OCRService();
   final AIService _aiService = AIService();
 
   Future<void> _pickFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
     );
-
-    if (result != null && result.files.single.path != null) {
-      _processFile(XFile(result.files.single.path!));
-    }
+    final path = result?.files.single.path;
+    if (path != null) await _processFile(XFile(path));
   }
 
   Future<void> _processImage(ImageSource source) async {
-    final picker = ImagePicker();
-    // رفع الجودة قليلاً لضمان وضوح الأرقام للـ AI
-    final image = await picker.pickImage(
+    final image = await ImagePicker().pickImage(
       source: source,
-      maxWidth: 800, // تقليل العرض لسهولة النقل عبر المحاكي
-      maxHeight: 800,
-      imageQuality: 70, // تقليل الجودة لضمان عبورها من الشبكة
+      maxWidth: 1600,
+      maxHeight: 1600,
+      imageQuality: 85,
     );
-    if (image != null) _processFile(image);
+    if (image != null) await _processFile(image);
   }
 
   Future<void> _processFile(XFile file) async {
     setState(() {
+      _hasError = false;
       _isLoading = true;
       _loadingStep = 1;
     });
 
     try {
       File fileToProcess = File(file.path);
-      
-      // ضغط الصورة إذا لزم الأمر قبل إرسالها لـ Groq
       if (!file.path.toLowerCase().endsWith('.pdf')) {
         fileToProcess = await _compressImageIfNeeded(fileToProcess);
       }
 
-      await Future.delayed(const Duration(milliseconds: 800));
-      setState(() => _loadingStep = 2);
-      
+      if (mounted) setState(() => _loadingStep = 2);
       List<Map<String, dynamic>> structuredData;
-      
+
       if (file.path.toLowerCase().endsWith('.pdf')) {
         final text = await _ocrService.extractText(XFile(fileToProcess.path));
-        setState(() => _loadingStep = 3);
+        if (mounted) setState(() => _loadingStep = 3);
         structuredData = await _aiService.structurePrayerTimes(text);
       } else {
-        await Future.delayed(const Duration(milliseconds: 500));
-        setState(() => _loadingStep = 3);
-        // التعديل هنا: استخدام الملف المكبوس بدلاً من fileToProcess القديم
-        final compressedFile = await _compressImageIfNeeded(fileToProcess);
-        structuredData = await _aiService.structurePrayerTimesFromImage(compressedFile);
+        if (mounted) setState(() => _loadingStep = 3);
+        structuredData = await _aiService.structurePrayerTimesFromImage(fileToProcess);
       }
-      
-      setState(() => _loadingStep = 4);
-      await Future.delayed(const Duration(milliseconds: 500));
 
-      if (mounted) {
-        if (structuredData.isEmpty) {
-          _showErrorUI();
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ReviewScreen(initialData: structuredData),
-            ),
-          );
-        }
+      if (mounted) setState(() => _loadingStep = 4);
+
+      if (!mounted) return;
+      if (structuredData.isEmpty) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+        return;
       }
-    } catch (e) {
-      if (mounted) _showErrorUI();
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => ReviewScreen(initialData: structuredData)),
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+        });
+      }
     } finally {
       if (mounted && !_hasError) setState(() => _isLoading = false);
     }
@@ -100,11 +99,8 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Future<File> _compressImageIfNeeded(File original) async {
     final sizeInBytes = await original.length();
-    const maxAllowedBytes = 3 * 1024 * 1024; // هامش أمان تحت حد الـ 4MB
-
+    const maxAllowedBytes = 3 * 1024 * 1024;
     if (sizeInBytes <= maxAllowedBytes) return original;
-
-    print("Compressing image... current size: ${(sizeInBytes / (1024 * 1024)).toStringAsFixed(2)} MB");
 
     final bytes = await original.readAsBytes();
     final decoded = img.decodeImage(bytes);
@@ -120,336 +116,221 @@ class _UploadScreenState extends State<UploadScreen> {
     }
 
     int quality = 85;
-    List<int> outputBytes = img.encodeJpg(resized, quality: quality);
-    while (outputBytes.length > maxAllowedBytes && quality > 30) {
+    List<int> output = img.encodeJpg(resized, quality: quality);
+    while (output.length > maxAllowedBytes && quality > 30) {
       quality -= 10;
-      outputBytes = img.encodeJpg(resized, quality: quality);
+      output = img.encodeJpg(resized, quality: quality);
     }
 
     final tempDir = await getTemporaryDirectory();
-    final compressedFile = File(
-      '${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg',
-    );
-    await compressedFile.writeAsBytes(outputBytes);
-    
-    print("New size: ${(outputBytes.length / (1024 * 1024)).toStringAsFixed(2)} MB");
-    return compressedFile;
-  }
-
-  bool _hasError = false;
-  void _showErrorUI() {
-    setState(() {
-      _hasError = true;
-      _isLoading = false;
-    });
+    final compressed = File('${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg');
+    await compressed.writeAsBytes(output);
+    return compressed;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF071019),
+      appBar: _isLoading ? null : AppBar(title: Text(context.tr('uploadTitle'))),
       body: SafeArea(
-        child: _hasError 
-          ? _buildErrorContent() 
-          : (_isLoading ? _buildLoading() : _buildContent()),
-      ),
-    );
-  }
-
-  Widget _buildErrorContent() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 140,
-                  height: 140,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.1), width: 2),
-                  ),
-                ),
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.redAccent.withOpacity(0.05),
-                  ),
-                  child: const Icon(Icons.priority_high_rounded, size: 45, color: Colors.redAccent),
-                ),
-              ],
-            ),
-            const SizedBox(height: 50),
-            const Text(
-              'تعذّر قراءة الإمساكية',
-              style: TextStyle(color: Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'الصورة غير واضحة. حاول بصورة أوضح مع إضاءة جيدة',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 16, height: 1.5),
-            ),
-            const SizedBox(height: 60),
-            SizedBox(
-              width: 220,
-              height: 60,
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => _hasError = false),
-                icon: const Icon(Icons.refresh_rounded, color: Colors.redAccent),
-                label: const Text('حاول مرة أخرى', style: TextStyle(color: Colors.redAccent, fontSize: 18)),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(color: Colors.redAccent.withOpacity(0.2)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                ),
-              ),
-            ),
-          ],
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          child: _hasError
+              ? _ErrorState(onRetry: () => setState(() => _hasError = false))
+              : _isLoading
+                  ? _LoadingState(step: _loadingStep)
+                  : _UploadContent(
+                      onFile: _pickFile,
+                      onGallery: () => _processImage(ImageSource.gallery),
+                      onCamera: () => _processImage(ImageSource.camera),
+                    ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildLoading() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Robot Avatar
-            Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.blue.withOpacity(0.2), width: 2),
-                gradient: RadialGradient(
-                  colors: [Colors.blue.withOpacity(0.1), Colors.transparent],
-                ),
-              ),
-              child: const Center(
-                child: Icon(Icons.smart_toy_rounded, size: 80, color: Colors.blueAccent),
-              ),
-            ),
-            const SizedBox(height: 40),
-            const Text(
-              'منيب يقرأ الإمساكية',
-              style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            const Text(
-              'جاري استخراج أوقات الصلاة...',
-              style: TextStyle(color: Colors.white38, fontSize: 16),
-            ),
-            const SizedBox(height: 50),
-            
-            // Steps
-            _buildLoadingStep(1, "قراءة الصورة", _loadingStep),
-            _buildLoadingStep(2, "اكتشاف الجدول", _loadingStep),
-            _buildLoadingStep(3, "فهم الجدول وتحليله", _loadingStep),
-            _buildLoadingStep(4, "تجهيز أوقات الصلاة", _loadingStep),
+class _UploadContent extends StatelessWidget {
+  final VoidCallback onFile;
+  final VoidCallback onGallery;
+  final VoidCallback onCamera;
 
-            const SizedBox(height: 50),
-            
-            // Progress Bar
-            Column(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: _loadingStep / 4,
-                    minHeight: 6,
-                    backgroundColor: Colors.white10,
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                Text(
-                  "${(_loadingStep / 4 * 100).toInt()}%",
-                  style: const TextStyle(color: Colors.white24, fontSize: 14),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  const _UploadContent({required this.onFile, required this.onGallery, required this.onCamera});
 
-  Widget _buildLoadingStep(int step, String title, int currentStep) {
-    bool isDone = currentStep > step;
-    bool isCurrent = currentStep == step;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-      decoration: BoxDecoration(
-        color: isCurrent ? Colors.blue.withOpacity(0.05) : Colors.transparent,
-        borderRadius: BorderRadius.circular(15),
-        border: isCurrent ? Border.all(color: Colors.blue.withOpacity(0.1)) : null,
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: isDone ? Colors.blue : (isCurrent ? Colors.amber : Colors.white24),
-              fontSize: 16,
-              fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-          const SizedBox(width: 15),
-          if (isDone) const Icon(Icons.check, color: Colors.blue, size: 18),
-          if (isCurrent) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.amber))),
-          if (!isDone && !isCurrent) Container(width: 18, height: 18, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white10, width: 2))),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    return Column(
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
       children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white70),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-              const Text(
-                'رفع الإمساكية',
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(width: 48), // Spacer
-            ],
-          ),
-        ),
-
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 30),
+        Text(context.tr('uploadHint'), style: theme.textTheme.bodyLarge),
+        const SizedBox(height: 24),
+        InkWell(
+          onTap: onFile,
+          borderRadius: BorderRadius.circular(28),
+          child: Container(
+            height: 230,
+            decoration: BoxDecoration(
+              color: scheme.surface,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: scheme.primary.withValues(alpha: 0.45), width: 1.5),
+            ),
             child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(height: 20),
-                // Drop Zone Box
-                GestureDetector(
-                  onTap: _pickFile,
-                  child: Container(
-                    width: double.infinity,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.02),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                        color: Colors.blue.withOpacity(0.3),
-                        width: 2,
-                        style: BorderStyle.solid, // Custom dashed borders are tricky in Flutter without packages
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.cloud_upload, color: Colors.white70, size: 60),
-                        const SizedBox(height: 20),
-                        const Text(
-                          'اسحب وأفلت هنا',
-                          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'أو اختر طريقة الرفع أدناه',
-                          style: TextStyle(color: Colors.white38, fontSize: 14),
-                        ),
-                        const SizedBox(height: 15),
-                        Text(
-                          '10MB حتى PNG . JPG . PDF',
-                          style: TextStyle(color: Colors.white.withOpacity(0.1), fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-                const Text('أو', style: TextStyle(color: Colors.white24, fontSize: 16)),
-                const SizedBox(height: 20),
-
-                // Action Buttons Grid
-                Row(
-                  children: [
-                    Expanded(child: _buildActionBtn('PDF', Icons.picture_as_pdf, _pickFile)),
-                    const SizedBox(width: 15),
-                    Expanded(child: _buildActionBtn('المعرض', Icons.photo_library, () => _processImage(ImageSource.gallery))),
-                    const SizedBox(width: 15),
-                    Expanded(child: _buildActionBtn('الكاميرا', Icons.camera_alt, () => _processImage(ImageSource.camera))),
-                  ],
-                ),
-
-                const SizedBox(height: 40),
-                // Bottom Hint
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white.withOpacity(0.05)),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.auto_awesome, color: Color(0xFFFFD166), size: 18),
-                      SizedBox(width: 10),
-                      Text(
-                        'تأكد أن الإمساكية واضحة وغير مقطوعة',
-                        style: TextStyle(color: Colors.white38, fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
+                Icon(Icons.cloud_upload_outlined, size: 58, color: scheme.primary),
+                const SizedBox(height: 16),
+                Text(context.tr('file'), style: theme.textTheme.titleLarge),
+                const SizedBox(height: 6),
+                Text('JPG • PNG • PDF', style: theme.textTheme.bodySmall),
               ],
             ),
           ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.photo_library_outlined,
+                title: context.tr('gallery'),
+                onTap: onGallery,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.camera_alt_outlined,
+                title: context.tr('camera'),
+                onTap: onCamera,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
+}
 
-  Widget _buildActionBtn(String title, IconData icon, VoidCallback onTap) {
-    return GestureDetector(
+class _ActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _ActionCard({required this.icon, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
       child: Container(
-        height: 120,
+        padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(25),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: scheme.outline),
         ),
+        child: Column(
+          children: [
+            Icon(icon, color: scheme.primary, size: 30),
+            const SizedBox(height: 10),
+            Text(title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleSmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadingState extends StatelessWidget {
+  final int step;
+
+  const _LoadingState({required this.step});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final labels = [
+      context.tr('processing1'),
+      context.tr('processing2'),
+      context.tr('processing3'),
+      context.tr('processing4'),
+    ];
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          children: [
+            Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.auto_awesome_rounded, size: 52, color: scheme.primary),
+            ),
+            const SizedBox(height: 24),
+            Text(context.tr('processing'), style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 28),
+            ...List.generate(labels.length, (index) {
+              final number = index + 1;
+              final done = step > number;
+              final current = step == number;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: done
+                    ? Icon(Icons.check_circle_rounded, color: scheme.primary)
+                    : current
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                          )
+                        : Icon(Icons.circle_outlined, color: scheme.outline),
+                title: Text(labels[index]),
+              );
+            }),
+            const SizedBox(height: 18),
+            LinearProgressIndicator(value: step.clamp(0, 4) / 4),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final VoidCallback onRetry;
+
+  const _ErrorState({required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white70, size: 30),
-            const SizedBox(height: 12),
+            Icon(Icons.error_outline_rounded, size: 72, color: scheme.error),
+            const SizedBox(height: 20),
             Text(
-              title,
-              style: const TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold),
+              context.tr('processingError'),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: Text(context.tr('tryAgain')),
             ),
           ],
         ),
