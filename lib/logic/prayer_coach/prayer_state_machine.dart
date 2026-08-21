@@ -6,7 +6,7 @@ enum PrayerState {
   sujud1,
   sitting,
   sujud2,
-  completed
+  completed,
 }
 
 class PrayerStateMachine {
@@ -14,66 +14,32 @@ class PrayerStateMachine {
   int _currentRakah = 1;
   final int totalRakahs;
 
-  PrayerStateMachine({required this.totalRakahs});
+  PrayerStateMachine({required int totalRakahs}) : totalRakahs = totalRakahs < 1 ? 1 : totalRakahs;
 
   PrayerState get currentState => _currentState;
   int get currentRakah => _currentRakah;
 
-  // منطق الانتقال بين الحالات
   bool transition(PrayerState nextState) {
-    switch (_currentState) {
-      case PrayerState.idle:
-        if (nextState == PrayerState.standing) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.standing:
-        if (nextState == PrayerState.ruku) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.ruku:
-        if (nextState == PrayerState.standingAfterRuku) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.standingAfterRuku:
-        if (nextState == PrayerState.sujud1) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.sujud1:
-        if (nextState == PrayerState.sitting) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.sitting:
-        if (nextState == PrayerState.sujud2) {
-          _currentState = nextState;
-          return true;
-        }
-        break;
-      case PrayerState.sujud2:
-        if (_currentRakah < totalRakahs) {
-          if (nextState == PrayerState.standing) {
-            _currentRakah++;
-            _currentState = PrayerState.standing;
-            return true;
-          }
-        } else {
-          _currentState = PrayerState.completed;
-          return true;
-        }
-        break;
-      case PrayerState.completed:
-        return false;
+    if (_currentState == PrayerState.completed) return false;
+
+    final expected = switch (_currentState) {
+      PrayerState.idle => PrayerState.standing,
+      PrayerState.standing => PrayerState.ruku,
+      PrayerState.ruku => PrayerState.standingAfterRuku,
+      PrayerState.standingAfterRuku => PrayerState.sujud1,
+      PrayerState.sujud1 => PrayerState.sitting,
+      PrayerState.sitting => PrayerState.sujud2,
+      PrayerState.sujud2 => _currentRakah < totalRakahs ? PrayerState.standing : PrayerState.completed,
+      PrayerState.completed => PrayerState.completed,
+    };
+
+    if (nextState != expected) return false;
+
+    if (_currentState == PrayerState.sujud2 && nextState == PrayerState.standing) {
+      _currentRakah++;
     }
-    return false;
+    _currentState = nextState;
+    return true;
   }
 
   void reset() {
