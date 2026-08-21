@@ -8,200 +8,92 @@ class ImagePreprocessor {
     final bytes = await original.readAsBytes();
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return original;
-
     var processed = img.bakeOrientation(decoded);
-
-    if (processed.height > processed.width * 1.15) {
-      final cropX = (processed.width * 0.025).round();
-      final cropY = (processed.height * 0.14).round();
-      final cropWidth = processed.width - (cropX * 2);
-      final cropHeight = (processed.height * 0.84).round();
-
-      if (cropWidth > 0 &&
-          cropHeight > 0 &&
-          cropY + cropHeight <= processed.height) {
-        processed = img.copyCrop(
-          processed,
-          x: cropX,
-          y: cropY,
-          width: cropWidth,
-          height: cropHeight,
-        );
-      }
-    }
-
     processed = _resizeForOcr(processed, targetLongEdge: 2200);
     processed = img.grayscale(processed);
-
     return _writeTemp(processed, 'munib_ocr_full');
   }
 
+  /// Creates one context image plus narrow horizontal row images.
+  /// We deliberately do not ask Tesseract to understand the whole table.
   Future<List<File>> prepareMonthlyOcrParts(File original) async {
     final bytes = await original.readAsBytes();
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return [original];
 
-    final oriented = img.bakeOrientation(decoded);
+    final source = img.bakeOrientation(decoded);
     final files = <File>[];
 
-    final contextHeight = (oriented.height * 0.42).round().clamp(1, oriented.height);
+    // Header/context: enough to capture month, year and column labels.
+    final contextHeight = (source.height * 0.34).round().clamp(1, source.height);
     var context = img.copyCrop(
-      oriented,
+      source,
       x: 0,
       y: 0,
-      width: oriented.width,
+      width: source.width,
       height: contextHeight,
     );
-    context = _resizeForOcr(context, targetLongEdge: 1900);
+    context = _resizeForOcr(context, targetLongEdge: 1800);
     context = img.grayscale(context);
     files.add(await _writeTemp(context, 'munib_ocr_context'));
 
-    final sideMargin = (oriented.width * 0.015).round();
-    final bodyTop = (oriented.height * 0.20).round();
-    final bodyBottom = (oriented.height * 0.99).round();
-    final bodyHeight = (bodyBottom - bodyTop).clamp(1, oriented.height - bodyTop);
-    final bodyWidth = (oriented.width - sideMargin * 2).clamp(1, oriented.width);
+    // For the current official-style imsakia layout the timetable occupies
+    // approximately this vertical region. Split it into many thin rows so
+    // OCR preserves columns instead of merging unrelated days.
+    final left = (source.width * 0.018).round();
+    final right = (source.width * 0.982).round();
+    final top = (source.height * 0.245).round();
+    final bottom = (source.height * 0.915).round();
+    final width = (right - left).clamp(1, source.width - left);
+    final height = (bottom - top).clamp(1, source.height - top);
 
-    final body = img.copyCrop(
-      oriented,
-      x: sideMargin,
-      y: bodyTop,
-      width: bodyWidth,
-      height: bodyHeight,
+    final table = img.copyCrop(
+      source,
+      x: left,
+      y: top,
+      width: width,
+      height: height,
     );
 
-    final separators = _detectHorizontalSeparators(body);
-    final rowRanges = _rowRangesFromSeparators(body.height, separators);
+    // 31 slots lets us support a full Gregorian month. Small vertical padding
+    // keeps digits close to row borders from being clipped.
+    const rowCount = 31;
+    final rowHeight = table.height / rowCount;
+    for (var i = 0; i < rowCount; i++) {
+      final nominalTop = (i * rowHeight).round();
+      final nominalBottom = ((i + 1) * rowHeight).round();
+      final pad = (rowHeight * 0.18).round().clamp(1, 8);
+      final y = (nominalTop - pad).clamp(0, table.height - 1);
+      final end = (nominalBottom + pad).clamp(y + 1, table.height);
 
-    if (rowRanges.length >= 8) {
-      var rowIndex = 0;
-      for (final range in rowRanges) {
-        final top = range.$1;
-        final height = range.$2;
-        if (height < 12) continue;
+      var row = img.copyCrop(
+        table,
+        x: 0,
+        y: y,
+        width: table.width,
+        height: end - y,
+      );
 
-        final pad = (height * 0.12).round().clamp(2, 14);
-        final y = (top - pad).clamp(0, body.height - 1);
-        final end = (top + height + pad).clamp(y + 1, body.height);
-
-        var row = img.copyCrop(
-          body,
-          x: 0,
-          y: y,
-          width: body.width,
-          height: end - y,
+      // Upscale only the row, not the entire source image. This is much lighter
+      // on memory while giving Tesseract larger prayer-time digits.
+      final targetWidth = row.width < 1800 ? 1800 : row.width;
+      if (row.width != targetWidth) {
+        row = img.copyResize(
+          row,
+          width: targetWidth,
+          interpolation: img.Interpolation.linear,
         );
-
-        if (row.width < 2200) {
-          row = img.copyResize(
-            row,
-            width: 2200,
-            interpolation: img.Interpolation.linear,
-          );
-        }
-        row = img.grayscale(row);
-        rowIndex++;
-        files.add(await _writeTemp(row, 'munib_ocr_row_$rowIndex'));
       }
-    } else {
-      const bandCount = 10;
-      const overlapRatio = 0.12;
-      final nominal = body.height / bandCount;
-
-      for (var i = 0; i < bandCount; i++) {
-        final baseTop = (i * nominal).round();
-        final overlap = (nominal * overlapRatio).round();
-        final y = (baseTop - (i == 0 ? 0 : overlap)).clamp(0, body.height - 1);
-        final nextBase = ((i + 1) * nominal).round();
-        final end = (nextBase + (i == bandCount - 1 ? 0 : overlap))
-            .clamp(y + 1, body.height);
-
-        var band = img.copyCrop(
-          body,
-          x: 0,
-          y: y,
-          width: body.width,
-          height: end - y,
-        );
-        if (band.width < 2000) {
-          band = img.copyResize(
-            band,
-            width: 2000,
-            interpolation: img.Interpolation.linear,
-          );
-        }
-        band = img.grayscale(band);
-        files.add(await _writeTemp(band, 'munib_ocr_band_${i + 1}'));
-      }
+      row = img.grayscale(row);
+      files.add(await _writeTemp(row, 'munib_ocr_row_${i + 1}'));
     }
 
     return files;
   }
 
-  List<int> _detectHorizontalSeparators(img.Image image) {
-    final candidateYs = <int>[];
-    final sampleStep = image.width > 1200 ? 6 : 4;
-    final samples = (image.width / sampleStep).ceil();
-
-    for (var y = 0; y < image.height; y += 2) {
-      var dark = 0;
-      for (var x = 0; x < image.width; x += sampleStep) {
-        final p = image.getPixel(x, y);
-        final lum = (p.r.toDouble() + p.g.toDouble() + p.b.toDouble()) / 3.0;
-        if (lum < 155) dark++;
-      }
-
-      if (dark / samples >= 0.42) {
-        candidateYs.add(y);
-      }
-    }
-
-    if (candidateYs.isEmpty) return const [];
-
-    final grouped = <List<int>>[];
-    var current = <int>[candidateYs.first];
-    for (var i = 1; i < candidateYs.length; i++) {
-      if (candidateYs[i] - candidateYs[i - 1] <= 4) {
-        current.add(candidateYs[i]);
-      } else {
-        grouped.add(current);
-        current = <int>[candidateYs[i]];
-      }
-    }
-    grouped.add(current);
-
-    return grouped
-        .map((group) => group[group.length ~/ 2])
-        .where((y) => y > 2 && y < image.height - 2)
-        .toList();
-  }
-
-  List<(int, int)> _rowRangesFromSeparators(
-    int imageHeight,
-    List<int> separators,
-  ) {
-    if (separators.length < 4) return const [];
-
-    final ranges = <(int, int)>[];
-    for (var i = 0; i < separators.length - 1; i++) {
-      final top = separators[i] + 1;
-      final bottom = separators[i + 1] - 1;
-      final height = bottom - top;
-
-      if (height >= 12 && height <= imageHeight * 0.12) {
-        ranges.add((top, height));
-      }
-    }
-    return ranges;
-  }
-
-  img.Image _resizeForOcr(
-    img.Image image, {
-    required int targetLongEdge,
-  }) {
+  img.Image _resizeForOcr(img.Image image, {required int targetLongEdge}) {
     final longEdge = image.width > image.height ? image.width : image.height;
-    if (longEdge <= targetLongEdge && longEdge >= 1400) return image;
-
+    if (longEdge <= targetLongEdge && longEdge >= 1200) return image;
     final scale = targetLongEdge / longEdge;
     return img.copyResize(
       image,
@@ -213,10 +105,8 @@ class ImagePreprocessor {
 
   Future<File> _writeTemp(img.Image image, String prefix) async {
     final tempDir = await getTemporaryDirectory();
-    final output = File(
-      '${tempDir.path}/${prefix}_${DateTime.now().microsecondsSinceEpoch}.jpg',
-    );
-    await output.writeAsBytes(img.encodeJpg(image, quality: 88), flush: true);
+    final output = File('${tempDir.path}/${prefix}_${DateTime.now().microsecondsSinceEpoch}.jpg');
+    await output.writeAsBytes(img.encodeJpg(image, quality: 90), flush: true);
     return output;
   }
 }
