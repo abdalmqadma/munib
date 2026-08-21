@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../providers/prayer_provider.dart';
 import 'splash_screen.dart';
 
@@ -9,20 +10,24 @@ class LanguageSelectionScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF071019),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 30),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.language_rounded, size: 80, color: Color(0xFFFFD166)),
+              Icon(Icons.language_rounded, size: 80, color: theme.colorScheme.primary),
               const SizedBox(height: 40),
-              const Text(
+              Text(
                 'اختر لغة التطبيق\nChoose App Language',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1.5),
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  height: 1.5,
+                ),
               ),
               const SizedBox(height: 60),
               _buildLanguageBtn(context, 'العربية', 'ar'),
@@ -36,30 +41,30 @@ class LanguageSelectionScreen extends StatelessWidget {
   }
 
   Widget _buildLanguageBtn(BuildContext context, String label, String code) {
+    final theme = Theme.of(context);
+
     return SizedBox(
       width: double.infinity,
       height: 65,
-      child: ElevatedButton(
+      child: OutlinedButton(
         onPressed: () async {
           final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('language', code);
           await prefs.setBool('isFirstRun', false);
-          
+          await context.read<PrayerProvider>().setLanguage(code);
+
           if (context.mounted) {
-            context.read<PrayerProvider>().updateSetting('language', label);
-            Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const SplashScreen()));
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const SplashScreen()),
+            );
           }
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white.withValues(alpha: 0.05),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: Colors.white10),
-          ),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: theme.colorScheme.surface,
         ),
         child: Text(
           label,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
     );
