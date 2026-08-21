@@ -15,7 +15,6 @@ class PrayerProvider with ChangeNotifier {
   Duration _timeLeft = Duration.zero;
   Timer? _timer;
 
-  // Settings state
   bool prayerNotif = true;
   bool reminderNotif = true;
   bool azkarNotif = false;
@@ -29,6 +28,11 @@ class PrayerProvider with ChangeNotifier {
   PrayerDay? get currentDay => _currentDay;
   String get nextPrayerName => _nextPrayerName;
   String get timeLeftFormatted => _formatDuration(_timeLeft);
+
+  String get languageCode => language == 'English' ? 'en' : 'ar';
+  Locale get locale => Locale(languageCode);
+  bool get isEnglish => languageCode == 'en';
+  ThemeMode get themeMode => isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
   PrayerProvider() {
     _loadFromHive();
@@ -62,12 +66,37 @@ class PrayerProvider with ChangeNotifier {
     silentMode = prefs.getBool('silentMode') ?? false;
     adhanVoice = prefs.getString('adhanVoice') ?? 'Meccan';
     currentCity = prefs.getString('currentCity') ?? "غير محدد";
-    language = prefs.getString('language') == 'en' ? 'English' : 'العربية';
+    final savedLanguage = prefs.getString('language') ?? 'ar';
+    language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     notifyListeners();
   }
 
+  Future<void> setLanguage(String code) async {
+    final normalized = code.toLowerCase() == 'en' || code == 'English' ? 'en' : 'ar';
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('language', normalized);
+    language = normalized == 'en' ? 'English' : 'العربية';
+    notifyListeners();
+  }
+
+  Future<void> setDarkMode(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDarkMode', value);
+    isDarkMode = value;
+    notifyListeners();
+  }
+
   Future<void> updateSetting(String key, dynamic value) async {
+    if (key == 'language' && value is String) {
+      await setLanguage(value);
+      return;
+    }
+    if (key == 'isDarkMode' && value is bool) {
+      await setDarkMode(value);
+      return;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     if (value is bool) {
       await prefs.setBool(key, value);
@@ -75,12 +104,10 @@ class PrayerProvider with ChangeNotifier {
       if (key == 'reminderNotif') reminderNotif = value;
       if (key == 'azkarNotif') azkarNotif = value;
       if (key == 'silentMode') silentMode = value;
-      if (key == 'isDarkMode') isDarkMode = value;
     } else if (value is String) {
       await prefs.setString(key, value);
       if (key == 'adhanVoice') adhanVoice = value;
       if (key == 'currentCity') currentCity = value;
-      if (key == 'language') language = value;
     }
     notifyListeners();
   }
@@ -97,13 +124,11 @@ class PrayerProvider with ChangeNotifier {
 
     String todayStr = DateFormat('yyyy-MM-dd').format(now);
     _currentDay = _monthlyPrayers.firstWhere(
-      (p) => p.date == todayStr, 
-      orElse: () => _monthlyPrayers.first
+      (p) => p.date == todayStr,
+      orElse: () => _monthlyPrayers.first,
     );
 
     _calculateNextPrayer(now);
-    
-    // Check if we need to notify listeners for time update
     notifyListeners();
 
     WidgetService.updateWidget(
@@ -138,24 +163,21 @@ class PrayerProvider with ChangeNotifier {
     }
 
     if (nextTime == null) {
-      // If all prayers passed today, next is tomorrow's Fajr
       _nextPrayerName = "Fajr";
-      
+
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
       try {
         final tomorrowData = _monthlyPrayers.firstWhere((p) => p.date == tomorrowStr);
         final tomorrowFajr = _parseTime(tomorrowData.fajr, now.add(const Duration(days: 1)), 'Fajr');
         _timeLeft = tomorrowFajr.difference(now);
       } catch (e) {
-        // Fallback if no tomorrow data exists
-        _timeLeft = Duration.zero; 
+        _timeLeft = Duration.zero;
       }
     } else {
       _nextPrayerName = nextName;
       _timeLeft = nextTime.difference(now);
     }
 
-    // Always update widget when calculation happens
     WidgetService.updateWidget(
       currentTime: DateFormat('HH:mm').format(now),
       nextPrayer: _nextPrayerName,
@@ -169,12 +191,9 @@ class PrayerProvider with ChangeNotifier {
       final parsed = format.parse(timeStr.trim());
       int hour = parsed.hour;
 
-      // Smart 24h conversion for Palestinian Imsakiahs
-      // If Asr, Maghrib, or Isha have hours 1-11, they are PM (add 12)
       if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) {
         hour += 12;
       }
-      // Dhuhr is 12 PM unless it's very early/late
       if (prayerName == 'Dhuhr' && hour < 10) {
         hour += 12;
       }
@@ -187,7 +206,6 @@ class PrayerProvider with ChangeNotifier {
         parsed.minute,
       );
     } catch (e) {
-      // Fallback if parsing fails
       return referenceDate.add(const Duration(days: 1));
     }
   }
