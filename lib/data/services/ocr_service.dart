@@ -38,9 +38,9 @@ class OCRService {
         if (text.trim().isEmpty) continue;
 
         if (i == 0) {
-          chunks.add('=== HEADER / MONTH / YEAR ===\n$text');
+          chunks.add('=== HEADER / MONTH / YEAR / COLUMN CONTEXT ===\n$text');
         } else {
-          chunks.add('=== TABLE PART $i OF ${parts.length - 1} ===\n$text');
+          chunks.add('=== TABLE ROW CANDIDATE $i ===\n$text');
         }
       }
     } finally {
