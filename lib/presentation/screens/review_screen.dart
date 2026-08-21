@@ -307,8 +307,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
     String key,
     String icon,
   ) {
-    final time = rawTime?.toString() ?? '';
-    final valid = RegExp(r'^\d{1,2}:\d{2}\$').hasMatch(time);
+    final time = rawTime?.toString().trim() ?? '';
+    // The previous regex accidentally matched a literal "$" at the end,
+    // causing every valid HH:mm value returned by the AI to render as --:--.
+    final valid = RegExp(r'^\d{1,2}:\d{2}$').hasMatch(time);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
