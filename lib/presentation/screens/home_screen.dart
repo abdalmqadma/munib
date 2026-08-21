@@ -83,7 +83,7 @@ class _HomeDashboard extends StatelessWidget {
                   subtitle: 'حسب الإمساكية المحفوظة في منيب',
                 ),
                 const SizedBox(height: 12),
-                PrayerGrid(),
+                const PrayerGrid(),
                 const SizedBox(height: 22),
                 const _ProtectedDataCard(),
                 const SizedBox(height: 18),
@@ -355,6 +355,69 @@ class _UploadImsakiaButton extends StatelessWidget {
         icon: const Icon(Icons.upload_file_rounded),
         label: const Text('تغيير الإمساكية'),
       ),
+    );
+  }
+}
+
+class PrayerGrid extends StatelessWidget {
+  const PrayerGrid({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<PrayerProvider>(
+      builder: (context, provider, child) {
+        final currentDay = provider.currentDay;
+        if (currentDay == null) return const SizedBox.shrink();
+
+        final nextPrayer = provider.nextPrayerName.toLowerCase();
+
+        return GridView.count(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisCount: 3,
+          mainAxisSpacing: 15,
+          crossAxisSpacing: 15,
+          childAspectRatio: 0.82,
+          children: [
+            PrayerGridItem(
+              name: 'الفجر',
+              time: currentDay.fajr,
+              icon: Icons.brightness_3_rounded,
+              isActive: nextPrayer == 'fajr',
+            ),
+            PrayerGridItem(
+              name: 'الشروق',
+              time: currentDay.sunrise,
+              icon: Icons.wb_sunny_outlined,
+              isActive: nextPrayer == 'sunrise',
+            ),
+            PrayerGridItem(
+              name: 'الظهر',
+              time: currentDay.dhuhr,
+              icon: Icons.wb_sunny_rounded,
+              isActive: nextPrayer == 'dhuhr',
+            ),
+            PrayerGridItem(
+              name: 'العصر',
+              time: currentDay.asr,
+              icon: Icons.wb_cloudy_rounded,
+              isActive: nextPrayer == 'asr',
+            ),
+            PrayerGridItem(
+              name: 'المغرب',
+              time: currentDay.maghrib,
+              icon: Icons.wb_twilight_rounded,
+              isActive: nextPrayer == 'maghrib',
+            ),
+            PrayerGridItem(
+              name: 'العشاء',
+              time: currentDay.isha,
+              icon: Icons.nightlight_round_sharp,
+              isActive: nextPrayer == 'isha',
+            ),
+          ],
+        );
+      },
     );
   }
 }
