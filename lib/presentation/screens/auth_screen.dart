@@ -6,7 +6,9 @@ import '../../data/services/auth_service.dart';
 import 'splash_screen.dart';
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  final bool returnOnSuccess;
+
+  const AuthScreen({super.key, this.returnOnSuccess = false});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -21,6 +23,18 @@ class _AuthScreenState extends State<AuthScreen> {
   String password = '';
   String name = '';
   bool isLoading = false;
+
+  Future<void> _finishAuth(User user) async {
+    if (!mounted) return;
+    if (widget.returnOnSuccess) {
+      Navigator.pop(context, true);
+      return;
+    }
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const SplashScreen()),
+    );
+  }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -37,10 +51,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted) return;
       if (result != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const SplashScreen()),
-        );
+        await _finishAuth(result);
       } else {
         _showError(context.tr('invalidCredentials'));
       }
@@ -58,10 +69,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
 
       if (user != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const SplashScreen()),
-        );
+        await _finishAuth(user);
       } else {
         _showError(context.tr('googleCancelled'));
       }
@@ -84,6 +92,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final scheme = theme.colorScheme;
 
     return Scaffold(
+      appBar: widget.returnOnSuccess ? AppBar() : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
