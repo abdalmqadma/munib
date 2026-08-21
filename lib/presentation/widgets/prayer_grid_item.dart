@@ -16,47 +16,51 @@ class PrayerGridItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: isActive ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(25),
+        color: isActive ? scheme.primaryContainer : scheme.surface,
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isActive ? Colors.blue.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.05),
-          width: isActive ? 2 : 1,
+          color: isActive ? scheme.primary.withValues(alpha: 0.55) : scheme.outline,
+          width: isActive ? 1.5 : 1,
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Row(
         children: [
-          // Elegant Icon replacing primitive emojis
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: isActive ? Colors.blue.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.02),
-              shape: BoxShape.circle,
+              color: isActive
+                  ? scheme.primary.withValues(alpha: 0.12)
+                  : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(
               icon,
-              color: isActive ? Colors.blue : Colors.white38,
-              size: 28,
+              color: isActive ? scheme.primary : scheme.onSurfaceVariant,
+              size: 22,
             ),
           ),
-          const SizedBox(height: 12),
-          Text(
-            name,
-            style: TextStyle(
-              color: isActive ? Colors.blue : Colors.white70,
-              fontSize: 16,
-              fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              name,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: isActive ? scheme.primary : scheme.onSurface,
+                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ),
-          const SizedBox(height: 4),
           Text(
             time,
-            style: TextStyle(
-              color: isActive ? Colors.blue.withValues(alpha: 0.7) : Colors.white24,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
+            textDirection: TextDirection.ltr,
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: isActive ? scheme.primary : scheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
