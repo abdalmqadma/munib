@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -86,8 +84,6 @@ class _UploadScreenState extends State<UploadScreen> {
         throw Exception('OCR returned no text');
       }
 
-      await _saveOcrDebugFile(rawOcrText);
-
       setState(() => _loadingStep = 3);
       debugPrint('[MUNIB] AI START');
       final aiWatch = Stopwatch()..start();
@@ -130,32 +126,6 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted && !_hasError) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  Future<void> _saveOcrDebugFile(String rawOcrText) async {
-    try {
-      final timestamp = DateTime.now()
-          .toIso8601String()
-          .replaceAll(':', '-')
-          .replaceAll('.', '-');
-      final fileName = 'munib_ocr_$timestamp.txt';
-      final bytes = Uint8List.fromList(utf8.encode(rawOcrText));
-
-      final savedPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'حفظ النص المستخرج من OCR',
-        fileName: fileName,
-        bytes: bytes,
-      );
-
-      if (savedPath == null) {
-        debugPrint('[MUNIB] OCR debug file save cancelled by user');
-      } else {
-        debugPrint('[MUNIB] OCR debug file saved: $savedPath');
-      }
-    } catch (e) {
-      // Debug export must never block the actual Imsakia processing flow.
-      debugPrint('[MUNIB] Unable to save OCR debug file: $e');
     }
   }
 
