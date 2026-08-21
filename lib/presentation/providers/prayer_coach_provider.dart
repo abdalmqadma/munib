@@ -6,14 +6,14 @@ import '../../logic/prayer_coach/prayer_rules_engine.dart';
 class PrayerCoachProvider with ChangeNotifier {
   late PrayerStateMachine _stateMachine;
   bool _isTraining = false;
-  String _feedback = 'يرجى الوقوف أمام الكاميرا للبدء';
+  String _feedbackKey = 'coachReady';
   double _sessionProgress = 0.0;
   int _stableFrames = 0;
   PrayerState? _candidateState;
   int _feedbackVersion = 0;
 
   bool get isTraining => _isTraining;
-  String get feedback => _feedback;
+  String get feedbackKey => _feedbackKey;
   double get sessionProgress => _sessionProgress.clamp(0.0, 1.0);
   PrayerState get currentState => _stateMachine.currentState;
   int get currentRakah => _stateMachine.currentRakah;
@@ -26,7 +26,7 @@ class PrayerCoachProvider with ChangeNotifier {
     _sessionProgress = 0;
     _stableFrames = 0;
     _candidateState = null;
-    _setFeedback('استعد، قف باعتدال بحيث يظهر جسمك كاملًا');
+    _setFeedbackKey('coachReady');
   }
 
   void processPose(Pose pose) {
@@ -35,7 +35,7 @@ class PrayerCoachProvider with ChangeNotifier {
     if (!PrayerRulesEngine.hasEnoughLandmarks(pose)) {
       _stableFrames = 0;
       _candidateState = null;
-      _setFeedback('ابتعد قليلًا حتى يظهر جسمك كاملًا أمام الكاميرا', notify: true);
+      _setFeedbackKey('coachBodyVisible');
       return;
     }
 
@@ -53,7 +53,6 @@ class PrayerCoachProvider with ChangeNotifier {
       _stableFrames = 1;
     }
 
-    // Require several consecutive frames to avoid accidental transitions.
     if (_stableFrames < 4) return;
 
     if (_stateMachine.transition(target)) {
@@ -81,7 +80,6 @@ class PrayerCoachProvider with ChangeNotifier {
         if (_stateMachine.currentRakah < _stateMachine.totalRakahs) {
           return PrayerRulesEngine.isStanding(pose) ? PrayerState.standing : null;
         }
-        // Final rak'ah completes after a stable second sujud.
         return PrayerRulesEngine.isSujud(pose) ? PrayerState.completed : null;
       case PrayerState.completed:
         return null;
@@ -102,37 +100,36 @@ class PrayerCoachProvider with ChangeNotifier {
       PrayerState.completed => stepsPerRakah,
     };
 
-    _sessionProgress =
-        (completedRakahs * stepsPerRakah + stateStep) /
+    _sessionProgress = (completedRakahs * stepsPerRakah + stateStep) /
         (_stateMachine.totalRakahs * stepsPerRakah);
 
     switch (_stateMachine.currentState) {
       case PrayerState.standing:
-        _setFeedback('ممتاز، الآن اركع بهدوء');
+        _setFeedbackKey('coachToRuku');
         break;
       case PrayerState.ruku:
-        _setFeedback('ركوع جيد، ارفع حتى تعود واقفًا');
+        _setFeedbackKey('coachRise');
         break;
       case PrayerState.standingAfterRuku:
-        _setFeedback('أحسنت، انزل الآن للسجود');
+        _setFeedbackKey('coachToSujud');
         break;
       case PrayerState.sujud1:
-        _setFeedback('سجود جيد، اجلس بين السجدتين');
+        _setFeedbackKey('coachToSit');
         break;
       case PrayerState.sitting:
-        _setFeedback('اجلس باعتدال، ثم اسجد مرة ثانية');
+        _setFeedbackKey('coachSecondSujud');
         break;
       case PrayerState.sujud2:
-        _setFeedback(
+        _setFeedbackKey(
           _stateMachine.currentRakah < _stateMachine.totalRakahs
-              ? 'أحسنت، قم للركعة التالية'
-              : 'ثبت في السجود لحظة لإكمال الصلاة',
+              ? 'coachNextRakah'
+              : 'coachHoldSujud',
         );
         break;
       case PrayerState.completed:
         _sessionProgress = 1;
         _isTraining = false;
-        _setFeedback('تقبل الله، اكتملت جلسة التدريب');
+        _setFeedbackKey('coachDone');
         break;
       case PrayerState.idle:
         break;
@@ -140,12 +137,9 @@ class PrayerCoachProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void _setFeedback(String value, {bool notify = false}) {
-    if (_feedback == value) {
-      if (notify) notifyListeners();
-      return;
-    }
-    _feedback = value;
+  void _setFeedbackKey(String value) {
+    if (_feedbackKey == value) return;
+    _feedbackKey = value;
     _feedbackVersion++;
     notifyListeners();
   }
