@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -23,6 +24,7 @@ void main() async {
   );
 
   await initializeDateFormatting('ar', null);
+  await initializeDateFormatting('en', null);
   await dotenv.load(fileName: '.env');
   await Hive.initFlutter();
 
@@ -31,17 +33,6 @@ void main() async {
   }
 
   await NotificationService.init();
-
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
-      systemNavigationBarColor: AppColors.backgroundDeep,
-      systemNavigationBarIconBrightness: Brightness.light,
-      systemNavigationBarDividerColor: AppColors.backgroundDeep,
-    ),
-  );
 
   runApp(
     MultiProvider(
@@ -59,12 +50,42 @@ class ImsakiahApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<PrayerProvider>();
+    final isDark = provider.isDarkMode;
+
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor:
+            isDark ? AppColors.backgroundDeep : AppColors.lightBackgroundDeep,
+        systemNavigationBarIconBrightness:
+            isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarDividerColor:
+            isDark ? AppColors.backgroundDeep : AppColors.lightBackgroundDeep,
+      ),
+    );
+
     return MaterialApp(
       title: 'Munib',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       darkTheme: AppTheme.dark,
+      themeMode: provider.themeMode,
+      locale: provider.locale,
+      supportedLocales: const [
+        Locale('ar'),
+        Locale('en'),
+      ],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      localeResolutionCallback: (locale, supportedLocales) {
+        return provider.locale;
+      },
       home: const SplashScreen(),
     );
   }
