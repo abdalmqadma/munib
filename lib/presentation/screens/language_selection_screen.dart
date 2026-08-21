@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../providers/prayer_provider.dart';
 import 'splash_screen.dart';
@@ -48,10 +47,7 @@ class LanguageSelectionScreen extends StatelessWidget {
       height: 65,
       child: OutlinedButton(
         onPressed: () async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setBool('isFirstRun', false);
           await context.read<PrayerProvider>().setLanguage(code);
-
           if (context.mounted) {
             Navigator.pushReplacement(
               context,
