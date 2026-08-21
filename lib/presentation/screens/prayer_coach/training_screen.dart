@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:provider/provider.dart';
@@ -70,8 +71,8 @@ class _TrainingScreenState extends State<TrainingScreen> {
       if (_cameras.isEmpty) throw Exception('No camera available');
 
       final desired = preferred ?? CameraLensDirection.front;
-      _activeCamera = _cameras.cast<CameraDescription?>().firstWhere(
-        (camera) => camera?.lensDirection == desired,
+      _activeCamera = _cameras.firstWhere(
+        (camera) => camera.lensDirection == desired,
         orElse: () => _cameras.first,
       );
 
