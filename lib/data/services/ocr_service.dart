@@ -14,9 +14,6 @@ class OCRService {
       'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
 
   static const _ocrArgs = {
-    // PSM 6 keeps text grouped into lines. For an Imsakia table this is more
-    // useful than sparse-text mode because each visual row should remain close
-    // together before the AI structuring step.
     'psm': '6',
     'preserve_interword_spaces': '1',
     'user_defined_dpi': '300',
@@ -25,20 +22,36 @@ class OCRService {
   final ImagePreprocessor _preprocessor = ImagePreprocessor();
 
   Future<String> extractText(XFile image) async {
-    final prepared = await _preprocessor.prepareForOcr(File(image.path));
     await _ensureTrainedData();
 
+    final parts = await _preprocessor.prepareMonthlyOcrParts(File(image.path));
+    final chunks = <String>[];
+
     try {
-      return await FlutterTesseractOcr.extractText(
-        prepared.path,
-        language: _languages,
-        args: _ocrArgs,
-      );
+      for (var i = 0; i < parts.length; i++) {
+        final text = await FlutterTesseractOcr.extractText(
+          parts[i].path,
+          language: _languages,
+          args: _ocrArgs,
+        );
+
+        if (text.trim().isEmpty) continue;
+
+        if (i == 0) {
+          chunks.add('=== HEADER / MONTH / YEAR ===\n$text');
+        } else {
+          chunks.add('=== TABLE PART $i OF ${parts.length - 1} ===\n$text');
+        }
+      }
     } finally {
-      if (prepared.path != image.path && await prepared.exists()) {
-        await prepared.delete();
+      for (final part in parts) {
+        if (part.path != image.path && await part.exists()) {
+          await part.delete();
+        }
       }
     }
+
+    return chunks.join('\n\n');
   }
 
   Future<String> extractTextFromPdf(File pdfFile) async {
@@ -66,21 +79,12 @@ class OCRService {
           );
           await imageFile.writeAsBytes(rendered.bytes);
 
-          File? prepared;
           try {
-            prepared = await _preprocessor.prepareForOcr(imageFile);
-            final text = await FlutterTesseractOcr.extractText(
-              prepared.path,
-              language: _languages,
-              args: _ocrArgs,
-            );
-            if (text.trim().isNotEmpty) chunks.add(text);
-          } finally {
-            if (prepared != null &&
-                prepared.path != imageFile.path &&
-                await prepared.exists()) {
-              await prepared.delete();
+            final pageText = await extractText(XFile(imageFile.path));
+            if (pageText.trim().isNotEmpty) {
+              chunks.add('=== PDF PAGE $pageNumber ===\n$pageText');
             }
+          } finally {
             if (await imageFile.exists()) await imageFile.delete();
           }
         } finally {
