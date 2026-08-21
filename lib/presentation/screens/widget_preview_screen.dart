@@ -138,7 +138,11 @@ class WidgetPreviewScreen extends StatelessWidget {
       );
 
       if (shouldLogin == true && context.mounted) {
-        await Navigator.push(context, MaterialPageRoute(builder: (_) => const AuthScreen()));
+        final loggedIn = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const AuthScreen(returnOnSuccess: true)),
+        );
+        if (loggedIn != true) return;
       }
       if (!context.mounted || FirebaseAuth.instance.currentUser == null) return;
     }
