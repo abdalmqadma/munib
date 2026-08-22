@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_strings.dart';
 import '../providers/prayer_provider.dart';
+import 'imsakia_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -54,6 +55,21 @@ class SettingsScreen extends StatelessWidget {
                     _settingsCard(context, [
                       _tile(
                         context,
+                        title: context.tr('imsakiaSettings'),
+                        subtitle: provider.use24HourFormat
+                            ? context.tr('timeFormat24')
+                            : context.tr('timeFormat12'),
+                        icon: Icons.calendar_month_outlined,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ImsakiaSettingsScreen()),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 24),
+                    _settingsCard(context, [
+                      _tile(
+                        context,
                         title: context.tr('appearance'),
                         subtitle: provider.isDarkMode ? context.tr('dark') : context.tr('light'),
                         icon: provider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
@@ -77,10 +93,7 @@ class SettingsScreen extends StatelessWidget {
                       ),
                     ]),
                     const SizedBox(height: 36),
-                    Text(
-                      context.tr('version'),
-                      style: theme.textTheme.bodySmall,
-                    ),
+                    Text(context.tr('version'), style: theme.textTheme.bodySmall),
                     const SizedBox(height: 20),
                   ],
                 ),
@@ -112,7 +125,6 @@ class SettingsScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final theme = Theme.of(context);
-
     return ListTile(
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
@@ -134,10 +146,7 @@ class SettingsScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-          context.tr('chooseLanguage'),
-          textAlign: TextAlign.center,
-        ),
+        title: Text(context.tr('chooseLanguage'), textAlign: TextAlign.center),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
