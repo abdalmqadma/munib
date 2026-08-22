@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "372276574383-davf5fvq23o0elqhlfr4mi4h8uv2vusi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.munib",
+            "certificate_hash": "56a580fae9875cc8ddcd57e655c96d68a0dc3a1a"
+          }
+        },
+        {
           "client_id": "372276574383-fnk40h3lpiedamnggb81tb52j0r2vqkc.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
