@@ -4,50 +4,98 @@ import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
+class ImsakiaExtractionResult {
+  final List<Map<String, dynamic>> days;
+  final bool requiresUserReview;
+  final List<Map<String, dynamic>> reviewRows;
+  final String? reviewMessage;
+
+  const ImsakiaExtractionResult({
+    required this.days,
+    required this.requiresUserReview,
+    required this.reviewRows,
+    this.reviewMessage,
+  });
+}
+
 class AIService {
+  static const String _imsakiaApiBaseUrl = 'https://munib-ocr-api.dockhosting.dev';
+
   String get _apiKey => (dotenv.env['GROQ_API_KEY'] ?? '').trim();
 
-  Future<List<Map<String, dynamic>>> structurePrayerTimesFromImage(File imageFile) async {
-    if (_apiKey.isEmpty) return [];
-    final bytes = await imageFile.readAsBytes();
-    final base64Image = base64Encode(bytes);
+  Future<ImsakiaExtractionResult> extractImsakiaFromImage(File imageFile) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$_imsakiaApiBaseUrl/extract'),
+    );
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_apiKey',
-        },
-        body: jsonEncode({
-          'model': 'qwen/qwen3.6-27b',
-          'messages': [
-            {
-              'role': 'user',
-              'content': [
-                {
-                  'type': 'text',
-                  'text': 'Extract all prayer times from this Arabic Imsakiah image. Return ONLY a JSON array. Keys: "date" (YYYY-MM-DD), "fajr" (Take Adhan Thani), "sunrise", "dhuhr", "asr", "maghrib", "isha". Times in HH:mm.'
-                },
-                {
-                  'type': 'image_url',
-                  'image_url': {'url': 'data:image/jpeg;base64,$base64Image'}
-                }
-              ]
-            }
-          ],
-          'max_tokens': 4096,
-          'temperature': 0.1,
-        }),
-      ).timeout(const Duration(seconds: 60));
+    request.files.add(
+      await http.MultipartFile.fromPath('file', imageFile.path),
+    );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final content = data['choices']?[0]['message']?['content'] as String?;
-        return _extractJsonArray(content);
+    final streamed = await request.send().timeout(const Duration(minutes: 3));
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode != 200) {
+      String message = 'Imsakia API returned ${response.statusCode}';
+      try {
+        final body = jsonDecode(response.body);
+        final detail = body is Map ? body['detail'] : null;
+        if (detail != null && detail.toString().trim().isNotEmpty) {
+          message = detail.toString();
+        }
+      } catch (_) {}
+      throw HttpException(message);
+    }
+
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['success'] != true || body['days'] is! List) {
+      throw const FormatException('Invalid Imsakia API response');
+    }
+
+    final days = <Map<String, dynamic>>[];
+    for (final raw in body['days'] as List) {
+      if (raw is! Map) continue;
+      final item = Map<String, dynamic>.from(raw);
+      days.add({
+        'fajr': (item['fajr'] ?? '').toString(),
+        'sunrise': (item['sunrise'] ?? '').toString(),
+        'dhuhr': (item['dhuhr'] ?? '').toString(),
+        'asr': (item['asr'] ?? '').toString(),
+        'maghrib': (item['maghrib'] ?? '').toString(),
+        'isha': (item['isha'] ?? '').toString(),
+        'row': item['row'],
+        'reconstructed': item['reconstructed'] == true,
+        'review_required': item['review_required'] == true || item['reconstructed'] == true,
+        'reconstruction_source': item['reconstruction_source'],
+      });
+    }
+
+    final reviewRows = <Map<String, dynamic>>[];
+    if (body['review_rows'] is List) {
+      for (final raw in body['review_rows'] as List) {
+        if (raw is Map) reviewRows.add(Map<String, dynamic>.from(raw));
       }
-    } catch (_) {}
-    return [];
+    }
+
+    for (final review in reviewRows) {
+      final row = review['row'];
+      if (row is int && row > 0 && row <= days.length) {
+        days[row - 1]['review_required'] = true;
+      }
+    }
+
+    return ImsakiaExtractionResult(
+      days: days,
+      requiresUserReview: body['requires_user_review'] == true || reviewRows.isNotEmpty,
+      reviewRows: reviewRows,
+      reviewMessage: body['review_message']?.toString(),
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> structurePrayerTimesFromImage(File imageFile) async {
+    final result = await extractImsakiaFromImage(imageFile);
+    return result.days;
   }
 
   /// Free, deterministic location-based prayer times. No Groq key is needed.
