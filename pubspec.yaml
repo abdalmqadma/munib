@@ -53,7 +53,7 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: "assets/muneeb_icons/store/playstore_512.png"
-  adaptive_icon_background: "#1E88E5"
+  adaptive_icon_background: "#F7F4EE"
   adaptive_icon_foreground: "assets/muneeb_icons/store/playstore_512.png"
 
 flutter:
