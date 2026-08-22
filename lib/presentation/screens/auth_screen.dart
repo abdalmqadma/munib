@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
@@ -16,19 +17,19 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _auth = AuthService();
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
 
   bool isLogin = true;
   bool isLoading = false;
-  bool awaitingVerification = false;
   bool obscurePassword = true;
-  String email = '';
-  String password = '';
-  String name = '';
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -36,12 +37,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _finishAuth(User user) async {
     if (!mounted) return;
-
     if (widget.returnOnSuccess) {
       Navigator.pop(context, true);
       return;
     }
-
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen()),
       (_) => false,
@@ -49,27 +48,63 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    _formKey.currentState!.save();
-
+    if (isLoading || !_formKey.currentState!.validate()) return;
     setState(() => isLoading = true);
+
     try {
-      final result = isLogin
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      final user = isLogin
           ? await _auth.signInWithEmail(email, password)
-          : await _auth.registerWithEmail(email, password, name);
+          : await _auth.registerWithEmail(
+              email,
+              password,
+              _nameController.text.trim(),
+            );
 
-      if (!mounted || result == null) return;
+      if (!mounted || user == null) return;
 
-      if (!result.emailVerified) {
-        setState(() => awaitingVerification = true);
-        return;
-      }
-
-      await _finishAuth(result);
+      // Email verification is intentionally non-blocking. Firebase mail can be
+      // delayed or misconfigured; successful account creation/sign-in should
+      // still enter the app.
+      await _finishAuth(user);
     } on FirebaseAuthException catch (e) {
       if (mounted) _showError(_authError(e.code));
     } catch (_) {
       if (mounted) _showError(context.tr('authUnexpected'));
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (isLoading) return;
+    setState(() => isLoading = true);
+
+    try {
+      final user = await _auth.signInWithGoogle();
+      if (!mounted) return;
+      if (user == null) {
+        _showError(context.tr('googleCancelled'));
+        return;
+      }
+      await _finishAuth(user);
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      final code = e.code.toLowerCase();
+      if (code.contains('sign_in_failed') || code.contains('10')) {
+        _showError(
+          'Google Sign-In configuration error. Check the release SHA-1/SHA-256 in Firebase.',
+        );
+      } else if (code.contains('network')) {
+        _showError(context.tr('googleError'));
+      } else {
+        _showError('${context.tr('googleError')} (${e.code})');
+      }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) _showError(_authError(e.code));
+    } catch (e) {
+      if (mounted) _showError('${context.tr('googleError')}\n$e');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -94,121 +129,26 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _checkVerification() async {
-    setState(() => isLoading = true);
-    try {
-      if (await _auth.refreshEmailVerification()) {
-        final user = FirebaseAuth.instance.currentUser;
-        if (user != null) await _finishAuth(user);
-      } else if (mounted) {
-        _showError(context.tr('emailNotVerifiedYet'));
-      }
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _resend() async {
-    try {
-      await _auth.resendVerification();
-      if (mounted) _showError(context.tr('verificationResent'));
-    } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_authError(e.code));
-    }
-  }
-
-  Future<void> _signInWithGoogle() async {
-    if (isLoading) return;
-    setState(() => isLoading = true);
-
-    try {
-      final user = await _auth.signInWithGoogle();
-      if (!mounted) return;
-
-      if (user == null) {
-        _showError(context.tr('googleCancelled'));
-        return;
-      }
-
-      await _finishAuth(user);
-    } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_authError(e.code));
-    } catch (_) {
-      if (mounted) _showError(context.tr('googleError'));
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
 
+  void _toggleMode() {
+    if (isLoading) return;
+    setState(() {
+      isLogin = !isLogin;
+      _formKey.currentState?.reset();
+      _passwordController.clear();
+      _confirmController.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-
-    if (awaitingVerification) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 92,
-                      height: 92,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: Icon(
-                        Icons.mark_email_read_outlined,
-                        size: 46,
-                        color: scheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      context.tr('verifyEmailTitle'),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context.tr('verifyEmailBody').replaceAll('{email}', email),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: isLoading ? null : _checkVerification,
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: Text(context.tr('iveVerified')),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: isLoading ? null : _resend,
-                      child: Text(context.tr('resendVerification')),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       appBar: widget.returnOnSuccess ? AppBar() : null,
@@ -223,59 +163,73 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   children: [
                     Container(
-                      width: 92,
-                      height: 92,
+                      width: 88,
+                      height: 88,
                       decoration: BoxDecoration(
                         color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(28),
+                        borderRadius: BorderRadius.circular(26),
                       ),
                       child: Icon(
                         Icons.lock_person_rounded,
-                        size: 46,
+                        size: 44,
                         color: scheme.primary,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     Text(
                       isLogin ? context.tr('signIn') : context.tr('createAccount'),
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineMedium,
                     ),
-                    const SizedBox(height: 34),
+                    const SizedBox(height: 30),
                     if (!isLogin) ...[
-                      _field(
-                        label: context.tr('fullName'),
-                        icon: Icons.person_outline_rounded,
+                      TextFormField(
+                        controller: _nameController,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: context.tr('fullName'),
+                          prefixIcon: const Icon(Icons.person_outline_rounded),
+                        ),
                         validator: (v) => (v?.trim().length ?? 0) < 2
                             ? context.tr('nameTooShort')
                             : null,
-                        onSave: (v) => name = v!.trim(),
                       ),
                       const SizedBox(height: 16),
                     ],
-                    _field(
-                      label: context.tr('email'),
-                      icon: Icons.email_outlined,
+                    TextFormField(
+                      controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      decoration: InputDecoration(
+                        labelText: context.tr('email'),
+                        prefixIcon: const Icon(Icons.email_outlined),
+                      ),
                       validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
                               .hasMatch(v?.trim() ?? '')
                           ? null
                           : context.tr('invalidEmail'),
-                      onSave: (v) => email = v!.trim(),
                     ),
                     const SizedBox(height: 16),
-                    _field(
+                    TextFormField(
                       controller: _passwordController,
-                      label: context.tr('password'),
-                      icon: Icons.key_rounded,
                       obscureText: obscurePassword,
-                      suffixIcon: IconButton(
-                        onPressed: () =>
-                            setState(() => obscurePassword = !obscurePassword),
-                        icon: Icon(
-                          obscurePassword
-                              ? Icons.visibility_outlined
-                              : Icons.visibility_off_outlined,
+                      textInputAction: isLogin
+                          ? TextInputAction.done
+                          : TextInputAction.next,
+                      onFieldSubmitted: isLogin ? (_) => _submit() : null,
+                      decoration: InputDecoration(
+                        labelText: context.tr('password'),
+                        prefixIcon: const Icon(Icons.key_rounded),
+                        suffixIcon: IconButton(
+                          onPressed: () => setState(
+                            () => obscurePassword = !obscurePassword,
+                          ),
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
                         ),
                       ),
                       validator: (v) {
@@ -293,59 +247,57 @@ class _AuthScreenState extends State<AuthScreen> {
                         }
                         return null;
                       },
-                      onSave: (v) => password = v!,
                     ),
                     if (!isLogin) ...[
                       const SizedBox(height: 16),
-                      _field(
+                      TextFormField(
                         controller: _confirmController,
-                        label: context.tr('confirmPassword'),
-                        icon: Icons.key_outlined,
                         obscureText: obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration: InputDecoration(
+                          labelText: context.tr('confirmPassword'),
+                          prefixIcon: const Icon(Icons.key_outlined),
+                        ),
                         validator: (v) => v != _passwordController.text
                             ? context.tr('passwordsDontMatch')
                             : null,
-                        onSave: (_) {},
                       ),
                     ],
                     const SizedBox(height: 28),
-                    if (isLoading)
-                      const Padding(
-                        padding: EdgeInsets.all(18),
-                        child: CircularProgressIndicator(),
-                      )
-                    else ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: _submit,
-                          child: Text(
-                            isLogin ? context.tr('login') : context.tr('register'),
-                          ),
-                        ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: isLoading ? null : _submit,
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(strokeWidth: 2.4),
+                              )
+                            : Text(
+                                isLogin
+                                    ? context.tr('login')
+                                    : context.tr('register'),
+                              ),
                       ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _signInWithGoogle,
-                          icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
-                          label: Text(context.tr('googleLogin')),
-                        ),
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isLoading ? null : _signInWithGoogle,
+                        icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
+                        label: Text(context.tr('googleLogin')),
                       ),
-                    ],
-                    const SizedBox(height: 16),
+                    ),
+                    const SizedBox(height: 14),
                     TextButton(
-                      onPressed: isLoading
-                          ? null
-                          : () => setState(() {
-                                isLogin = !isLogin;
-                                _formKey.currentState?.reset();
-                                _passwordController.clear();
-                                _confirmController.clear();
-                              }),
+                      onPressed: _toggleMode,
                       child: Text(
-                        isLogin ? context.tr('noAccount') : context.tr('haveAccount'),
+                        isLogin
+                            ? context.tr('noAccount')
+                            : context.tr('haveAccount'),
                       ),
                     ),
                   ],
@@ -355,33 +307,6 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _field({
-    TextEditingController? controller,
-    required String label,
-    required IconData icon,
-    required FormFieldSetter<String> onSave,
-    String? Function(String?)? validator,
-    TextInputType keyboardType = TextInputType.text,
-    bool obscureText = false,
-    Widget? suffixIcon,
-  }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        suffixIcon: suffixIcon,
-      ),
-      validator: validator ??
-          (v) => v == null || v.trim().isEmpty
-              ? context.tr('requiredField')
-              : null,
-      onSaved: onSave,
     );
   }
 }
