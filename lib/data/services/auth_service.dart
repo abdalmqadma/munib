@@ -20,9 +20,15 @@ class AuthService {
     if (user == null) return null;
 
     await user.updateDisplayName(name.trim());
-    await user.sendEmailVerification();
 
-    // Profile persistence must never block authentication/navigation.
+    // Verification is useful, but a mail delivery/configuration issue must not
+    // leave a freshly-created account stuck outside the app.
+    try {
+      await user.sendEmailVerification().timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // The user can request another verification email later.
+    }
+
     unawaited(_syncUserProfile(user, nameOverride: name.trim(), isNew: true));
     return user;
   }
@@ -42,7 +48,7 @@ class AuthService {
   Future<void> resendVerification() async {
     final user = _auth.currentUser;
     if (user != null && !user.emailVerified) {
-      await user.sendEmailVerification();
+      await user.sendEmailVerification().timeout(const Duration(seconds: 12));
     }
   }
 
@@ -69,9 +75,9 @@ class AuthService {
       idToken: googleAuth.idToken,
     );
 
-    // Firebase authentication is the only operation that must finish before
-    // the UI can continue. Firestore syncing happens in the background.
-    final result = await _auth.signInWithCredential(credential);
+    final result = await _auth
+        .signInWithCredential(credential)
+        .timeout(const Duration(seconds: 30));
     final user = result.user;
     if (user != null) {
       unawaited(_syncUserProfile(user));
@@ -102,14 +108,13 @@ class AuthService {
           .doc(user.uid)
           .set(data, SetOptions(merge: true))
           .timeout(const Duration(seconds: 8));
-    } catch (_) {
-      // Authentication has already succeeded. Profile sync can retry on the
-      // next login instead of trapping the user on the loading screen.
-    }
+    } catch (_) {}
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
     await _auth.signOut();
   }
 }
