@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/models/prayer_day.dart';
@@ -88,6 +89,75 @@ class _HomeContentState extends State<HomeContent> {
   bool _isAutoFetching = false;
   String? _locationName;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showCoachIntroOnce());
+  }
+
+  Future<void> _showCoachIntroOnce() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('prayerCoachIntroShown') ?? false) return;
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+
+    await prefs.setBool('prayerCoachIntroShown', true);
+    if (!mounted) return;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final scheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(Icons.accessibility_new_rounded, color: scheme.primary, size: 32),
+                ),
+                const SizedBox(height: 16),
+                Text(context.tr('newFeature'), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary)),
+                const SizedBox(height: 6),
+                Text(context.tr('coachIntroTitle'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
+                const SizedBox(height: 10),
+                Text(context.tr('coachIntroBody'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      widget.onStartTraining();
+                    },
+                    icon: const Icon(Icons.auto_awesome_rounded),
+                    label: Text(context.tr('tryNow')),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext),
+                  child: Text(context.tr('later')),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _fetchByLocation() async {
     if (_isAutoFetching) return;
     setState(() => _isAutoFetching = true);
@@ -119,7 +189,6 @@ class _HomeContentState extends State<HomeContent> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PrayerProvider>();
-    final scheme = Theme.of(context).colorScheme;
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _fetchByLocation,
@@ -137,14 +206,6 @@ class _HomeContentState extends State<HomeContent> {
               _NextPrayerSummary(provider: provider),
               const SizedBox(height: 24),
               _PrayerTimesSection(provider: provider),
-              const SizedBox(height: 24),
-              _CoachCard(onTap: widget.onStartTraining),
-              const SizedBox(height: 18),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadScreen())),
-                icon: Icon(Icons.cloud_upload_outlined, color: scheme.primary),
-                label: Text(context.tr('changeImsakia')),
-              ),
             ],
           ],
         ),
@@ -237,33 +298,14 @@ class _PrayerTimesSection extends StatelessWidget {
       const SizedBox(height: 14),
       ...rows.map((row) => Padding(
         padding: const EdgeInsets.only(bottom: 10),
-        child: PrayerGridItem(name: context.tr(row.$1), time: row.$2, icon: row.$3, isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase()),
+        child: PrayerGridItem(
+          name: context.tr(row.$1),
+          time: provider.formatPrayerTime(row.$2),
+          icon: row.$3,
+          isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase(),
+        ),
       )),
     ]);
-  }
-}
-
-class _CoachCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _CoachCard({required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(28), border: Border.all(color: scheme.outline)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(14)), child: Icon(Icons.accessibility_new_rounded, color: scheme.primary)),
-          const SizedBox(width: 12),
-          Expanded(child: Text(context.tr('teachMePrayer'), style: Theme.of(context).textTheme.titleLarge)),
-        ]),
-        const SizedBox(height: 12),
-        Text(context.tr('coachDescription'), style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 18),
-        SizedBox(width: double.infinity, child: FilledButton(onPressed: onTap, child: Text(context.tr('startTraining')))),
-      ]),
-    );
   }
 }
 
