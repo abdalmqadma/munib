@@ -107,12 +107,14 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _settingsCard(BuildContext context, List<Widget> children) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: theme.colorScheme.outline),
+    final radius = BorderRadius.circular(24);
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: radius,
+        side: BorderSide(color: theme.colorScheme.outline),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(children: children),
     );
   }
