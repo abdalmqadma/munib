@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/app_strings.dart';
@@ -22,6 +23,7 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _isLoading = false;
   bool _hasError = false;
   int _loadingStep = 0;
+  String? _errorMessage;
 
   final OCRService _ocrService = OCRService();
   final AIService _aiService = AIService();
@@ -48,26 +50,44 @@ class _UploadScreenState extends State<UploadScreen> {
   Future<void> _processFile(XFile file) async {
     setState(() {
       _hasError = false;
+      _errorMessage = null;
       _isLoading = true;
       _loadingStep = 1;
     });
 
     try {
       File fileToProcess = File(file.path);
-      if (!file.path.toLowerCase().endsWith('.pdf')) {
+      final isPdf = file.path.toLowerCase().endsWith('.pdf');
+
+      if (!isPdf) {
         fileToProcess = await _compressImageIfNeeded(fileToProcess);
       }
 
       if (mounted) setState(() => _loadingStep = 2);
+
       List<Map<String, dynamic>> structuredData;
 
-      if (file.path.toLowerCase().endsWith('.pdf')) {
+      if (isPdf) {
+        // PDF remains on the legacy path for now; the deployed image OCR API
+        // currently accepts image files only.
         final text = await _ocrService.extractText(XFile(fileToProcess.path));
         if (mounted) setState(() => _loadingStep = 3);
         structuredData = await _aiService.structurePrayerTimes(text);
       } else {
         if (mounted) setState(() => _loadingStep = 3);
-        structuredData = await _aiService.structurePrayerTimesFromImage(fileToProcess);
+
+        final extraction = await _aiService.extractImsakiaFromImage(fileToProcess);
+        structuredData = extraction.days;
+
+        if (!mounted) return;
+
+        final month = await _chooseImsakiaMonth();
+        if (month == null) {
+          setState(() => _isLoading = false);
+          return;
+        }
+
+        _applyDates(structuredData, month);
       }
 
       if (mounted) setState(() => _loadingStep = 4);
@@ -76,6 +96,10 @@ class _UploadScreenState extends State<UploadScreen> {
       if (structuredData.isEmpty) {
         setState(() {
           _hasError = true;
+          _errorMessage = _localized(
+            'لم يتم العثور على أوقات صلاة في الإمساكية.',
+            'No prayer times were found in the Imsakia.',
+          );
           _isLoading = false;
         });
         return;
@@ -83,18 +107,76 @@ class _UploadScreenState extends State<UploadScreen> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => ReviewScreen(initialData: structuredData)),
+        MaterialPageRoute(
+          builder: (_) => ReviewScreen(initialData: structuredData),
+        ),
       );
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           _hasError = true;
+          _errorMessage = _friendlyError(e);
           _isLoading = false;
         });
       }
     } finally {
       if (mounted && !_hasError) setState(() => _isLoading = false);
     }
+  }
+
+  Future<DateTime?> _chooseImsakiaMonth() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(now.year, now.month, 1),
+      firstDate: DateTime(now.year - 5, 1, 1),
+      lastDate: DateTime(now.year + 5, 12, 31),
+      helpText: _localized('اختر شهر الإمساكية', 'Choose the Imsakia month'),
+      fieldLabelText: _localized('شهر الإمساكية', 'Imsakia month'),
+    );
+
+    if (picked == null) return null;
+    return DateTime(picked.year, picked.month, 1);
+  }
+
+  void _applyDates(List<Map<String, dynamic>> days, DateTime month) {
+    final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
+
+    for (var index = 0; index < days.length; index++) {
+      if (index >= daysInMonth) {
+        throw const FormatException('Extracted rows exceed selected month length');
+      }
+
+      final date = DateTime(month.year, month.month, index + 1);
+      days[index]['date'] = DateFormat('yyyy-MM-dd').format(date);
+    }
+  }
+
+  String _friendlyError(Object error) {
+    final raw = error.toString();
+
+    if (raw.contains('SocketException') || raw.contains('Connection')) {
+      return _localized(
+        'تعذر الاتصال بخادم قراءة الإمساكية. تحقق من الإنترنت وحاول مرة أخرى.',
+        'Could not connect to the Imsakia server. Check your connection and try again.',
+      );
+    }
+
+    if (raw.contains('exceed selected month length')) {
+      return _localized(
+        'عدد الأيام المستخرجة لا يناسب الشهر الذي اخترته. اختر الشهر الصحيح وحاول مجددًا.',
+        'The extracted day count does not match the selected month. Choose the correct month and try again.',
+      );
+    }
+
+    return _localized(
+      'تعذر قراءة الإمساكية. حاول بصورة أوضح أو جرّب مرة أخرى.',
+      'Could not read the Imsakia. Try a clearer image or try again.',
+    );
+  }
+
+  String _localized(String ar, String en) {
+    return Localizations.localeOf(context).languageCode == 'en' ? en : ar;
   }
 
   Future<File> _compressImageIfNeeded(File original) async {
@@ -136,7 +218,13 @@ class _UploadScreenState extends State<UploadScreen> {
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           child: _hasError
-              ? _ErrorState(onRetry: () => setState(() => _hasError = false))
+              ? _ErrorState(
+                  message: _errorMessage,
+                  onRetry: () => setState(() {
+                    _hasError = false;
+                    _errorMessage = null;
+                  }),
+                )
               : _isLoading
                   ? _LoadingState(step: _loadingStep)
                   : _UploadContent(
@@ -307,8 +395,9 @@ class _LoadingState extends StatelessWidget {
 
 class _ErrorState extends StatelessWidget {
   final VoidCallback onRetry;
+  final String? message;
 
-  const _ErrorState({required this.onRetry});
+  const _ErrorState({required this.onRetry, this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -322,7 +411,7 @@ class _ErrorState extends StatelessWidget {
             Icon(Icons.error_outline_rounded, size: 72, color: scheme.error),
             const SizedBox(height: 20),
             Text(
-              context.tr('processingError'),
+              message ?? context.tr('processingError'),
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
