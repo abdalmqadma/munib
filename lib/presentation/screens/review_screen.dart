@@ -20,7 +20,12 @@ class _ReviewScreenState extends State<ReviewScreen> {
   @override
   void initState() {
     super.initState();
-    _data = List<Map<String, dynamic>>.from(widget.initialData);
+    _data = widget.initialData
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    final reviewIndex = _data.indexWhere((day) => day['review_required'] == true);
+    if (reviewIndex >= 0) _currentDayIndex = reviewIndex;
   }
 
   void _updateTime(String prayerKey, String newValue) {
@@ -65,6 +70,8 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
 
     final currentDay = _data[_currentDayIndex];
+    final currentNeedsReview = currentDay['review_required'] == true;
+    final hasReviewRows = _data.any((day) => day['review_required'] == true);
 
     return Scaffold(
       appBar: AppBar(
@@ -81,6 +88,33 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 style: theme.textTheme.bodyMedium,
               ),
             ),
+            if (hasReviewRows) ...[
+              const SizedBox(height: 14),
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: .10),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: scheme.primary.withValues(alpha: .35)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: scheme.primary),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isEn
+                            ? 'One or more days were estimated because the timetable image was unclear. Review the marked day, edit it if needed, or keep the suggested times.'
+                            : 'تم تقدير يوم أو أكثر لأن صفًا في صورة الإمساكية لم يُقرأ بوضوح. راجع اليوم المعلّم، وعدّله إذا لزم أو اقبل الأوقات المقترحة.',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             if (_data.length > 1)
               SizedBox(
@@ -91,10 +125,18 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   itemCount: _data.length,
                   itemBuilder: (context, index) {
                     final selected = _currentDayIndex == index;
+                    final needsReview = _data[index]['review_required'] == true;
                     return Padding(
                       padding: const EdgeInsetsDirectional.only(end: 8),
                       child: ChoiceChip(
                         selected: selected,
+                        avatar: needsReview
+                            ? Icon(
+                                Icons.warning_amber_rounded,
+                                size: 18,
+                                color: selected ? scheme.onPrimary : scheme.primary,
+                              )
+                            : null,
                         label: Text(isEn ? 'Day ${index + 1}' : 'يوم ${index + 1}'),
                         onSelected: (_) => setState(() => _currentDayIndex = index),
                       ),
@@ -109,11 +151,30 @@ class _ReviewScreenState extends State<ReviewScreen> {
                 decoration: BoxDecoration(
                   color: scheme.surface,
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: scheme.outline),
+                  border: Border.all(
+                    color: currentNeedsReview ? scheme.primary : scheme.outline,
+                    width: currentNeedsReview ? 1.6 : 1,
+                  ),
                 ),
                 child: ListView(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   children: [
+                    if (currentNeedsReview)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: scheme.primary, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isEn ? 'Estimated day — please verify' : 'يوم مقدّر — يرجى التحقق منه',
+                                style: theme.textTheme.titleSmall?.copyWith(color: scheme.primary),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     _prayerRow(context, context.tr('fajr'), currentDay['fajr'] ?? '--:--', 'fajr', Icons.bedtime_outlined),
                     const Divider(height: 1),
                     _prayerRow(context, context.tr('sunrise'), currentDay['sunrise'] ?? '--:--', 'sunrise', Icons.wb_twilight_outlined),
