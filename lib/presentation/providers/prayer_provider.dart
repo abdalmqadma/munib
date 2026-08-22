@@ -23,6 +23,7 @@ class PrayerProvider with ChangeNotifier {
   String currentCity = "غير محدد";
   String language = 'العربية';
   bool isDarkMode = true;
+  bool use24HourFormat = true;
 
   List<PrayerDay> get monthlyPrayers => _monthlyPrayers;
   PrayerDay? get currentDay => _currentDay;
@@ -69,6 +70,7 @@ class PrayerProvider with ChangeNotifier {
     final savedLanguage = prefs.getString('language') ?? 'ar';
     language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
+    use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
     notifyListeners();
   }
 
@@ -87,6 +89,25 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setUse24HourFormat(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('use24HourFormat', value);
+    use24HourFormat = value;
+    notifyListeners();
+  }
+
+  String formatPrayerTime(String rawTime) {
+    final value = rawTime.trim();
+    if (value.isEmpty || use24HourFormat) return value;
+
+    try {
+      final parsed = DateFormat('HH:mm').parseStrict(value);
+      return DateFormat('h:mm a', languageCode).format(parsed);
+    } catch (_) {
+      return value;
+    }
+  }
+
   Future<void> updateSetting(String key, dynamic value) async {
     if (key == 'language' && value is String) {
       await setLanguage(value);
@@ -94,6 +115,10 @@ class PrayerProvider with ChangeNotifier {
     }
     if (key == 'isDarkMode' && value is bool) {
       await setDarkMode(value);
+      return;
+    }
+    if (key == 'use24HourFormat' && value is bool) {
+      await setUse24HourFormat(value);
       return;
     }
 
@@ -132,7 +157,7 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
 
     WidgetService.updateWidget(
-      currentTime: DateFormat('HH:mm').format(now),
+      currentTime: use24HourFormat ? DateFormat('HH:mm').format(now) : DateFormat('h:mm a', languageCode).format(now),
       nextPrayer: _nextPrayerName,
       timeLeft: timeLeftFormatted,
     );
@@ -179,7 +204,7 @@ class PrayerProvider with ChangeNotifier {
     }
 
     WidgetService.updateWidget(
-      currentTime: DateFormat('HH:mm').format(now),
+      currentTime: use24HourFormat ? DateFormat('HH:mm').format(now) : DateFormat('h:mm a', languageCode).format(now),
       nextPrayer: _nextPrayerName,
       timeLeft: timeLeftFormatted,
     );
