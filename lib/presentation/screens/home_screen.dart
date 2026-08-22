@@ -163,7 +163,12 @@ class _HomeContentState extends State<HomeContent> {
     setState(() => _isAutoFetching = true);
     final provider = context.read<PrayerProvider>();
     try {
-      final location = await LocationService().getCurrentLocation();
+      // This method is only called from an explicit user action (button or
+      // pull-to-refresh), so this is the only place we allow the OS permission
+      // prompt to appear.
+      final location = await LocationService().getCurrentLocation(
+        requestPermission: true,
+      );
       if (mounted) setState(() => _locationName = location.city);
       final data = await AIService().fetchPrayerTimesByCoordinates(
         location.latitude,
