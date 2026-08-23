@@ -21,13 +21,9 @@ class AuthService {
 
     await user.updateDisplayName(name.trim());
 
-    // Verification is useful, but a mail delivery/configuration issue must not
-    // leave a freshly-created account stuck outside the app.
-    try {
-      await user.sendEmailVerification().timeout(const Duration(seconds: 12));
-    } catch (_) {
-      // The user can request another verification email later.
-    }
+    // This must succeed: an email/password account is not considered ready
+    // until Firebase has sent the verification message.
+    await user.sendEmailVerification().timeout(const Duration(seconds: 20));
 
     unawaited(_syncUserProfile(user, nameOverride: name.trim(), isNew: true));
     return user;
@@ -40,15 +36,25 @@ class AuthService {
     );
     final user = result.user;
     if (user != null) {
-      unawaited(_syncUserProfile(user));
+      await user.reload();
+      final refreshed = _auth.currentUser;
+      if (refreshed != null) unawaited(_syncUserProfile(refreshed));
+      return refreshed;
     }
-    return user;
+    return null;
   }
 
   Future<void> resendVerification() async {
     final user = _auth.currentUser;
-    if (user != null && !user.emailVerified) {
-      await user.sendEmailVerification().timeout(const Duration(seconds: 12));
+    if (user == null) {
+      throw FirebaseAuthException(code: 'no-current-user');
+    }
+    await user.reload();
+    final refreshed = _auth.currentUser;
+    if (refreshed != null && !refreshed.emailVerified) {
+      await refreshed
+          .sendEmailVerification()
+          .timeout(const Duration(seconds: 20));
     }
   }
 
@@ -83,6 +89,19 @@ class AuthService {
       unawaited(_syncUserProfile(user));
     }
     return user;
+  }
+
+  bool isPasswordUser(User user) =>
+      user.providerData.any((provider) => provider.providerId == 'password');
+
+  Future<void> signOutUnverifiedPasswordUser() async {
+    final user = _auth.currentUser;
+    if (user == null || !isPasswordUser(user)) return;
+    await user.reload();
+    final refreshed = _auth.currentUser;
+    if (refreshed != null && !refreshed.emailVerified) {
+      await _auth.signOut();
+    }
   }
 
   Future<void> _syncUserProfile(
