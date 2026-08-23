@@ -13,6 +13,7 @@ class PrayerProvider with ChangeNotifier {
   PrayerDay? _currentDay;
   String _nextPrayerName = "";
   Duration _timeLeft = Duration.zero;
+  DateTime? _nextPrayerTime;
   Timer? _timer;
 
   bool prayerNotif = true;
@@ -160,6 +161,7 @@ class PrayerProvider with ChangeNotifier {
       currentTime: use24HourFormat ? DateFormat('HH:mm').format(now) : DateFormat('h:mm a', languageCode).format(now),
       nextPrayer: _nextPrayerName,
       timeLeft: timeLeftFormatted,
+      nextPrayerTime: _nextPrayerTime,
     );
   }
 
@@ -189,25 +191,21 @@ class PrayerProvider with ChangeNotifier {
 
     if (nextTime == null) {
       _nextPrayerName = "Fajr";
-
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
       try {
         final tomorrowData = _monthlyPrayers.firstWhere((p) => p.date == tomorrowStr);
         final tomorrowFajr = _parseTime(tomorrowData.fajr, now.add(const Duration(days: 1)), 'Fajr');
+        _nextPrayerTime = tomorrowFajr;
         _timeLeft = tomorrowFajr.difference(now);
-      } catch (e) {
+      } catch (_) {
+        _nextPrayerTime = null;
         _timeLeft = Duration.zero;
       }
     } else {
       _nextPrayerName = nextName;
+      _nextPrayerTime = nextTime;
       _timeLeft = nextTime.difference(now);
     }
-
-    WidgetService.updateWidget(
-      currentTime: use24HourFormat ? DateFormat('HH:mm').format(now) : DateFormat('h:mm a', languageCode).format(now),
-      nextPrayer: _nextPrayerName,
-      timeLeft: timeLeftFormatted,
-    );
   }
 
   DateTime _parseTime(String timeStr, DateTime referenceDate, String prayerName) {
@@ -230,7 +228,7 @@ class PrayerProvider with ChangeNotifier {
         hour,
         parsed.minute,
       );
-    } catch (e) {
+    } catch (_) {
       return referenceDate.add(const Duration(days: 1));
     }
   }
