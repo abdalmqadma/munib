@@ -50,11 +50,15 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/muneeb_icons/store/playstore_512.png"
+  image_path_android: "assets/muneeb_icons/store/playstore_512.png"
+  image_path_ios: "assets/muneeb_icons/store/appstore_1024.png"
   adaptive_icon_background: "#F7F4EE"
   adaptive_icon_foreground: "assets/muneeb_icons/store/playstore_512.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
   assets:
+    - assets/muneeb_icons/
     - .env
