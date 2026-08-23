@@ -52,6 +52,8 @@ class MainActivity : FlutterActivity() {
                                     ?: setOf("آية", "حديث", "ذكر", "أثر طيب")).toList(),
                                 "intervalMinutes" to prefs.getInt("interval_minutes", 30),
                                 "visibleSeconds" to prefs.getInt("visible_seconds", 45),
+                                "quietMode" to prefs.getBoolean("quiet_mode", false),
+                                "contextualMode" to prefs.getBoolean("contextual_mode", true),
                             ),
                         )
                     }
@@ -63,12 +65,16 @@ class MainActivity : FlutterActivity() {
                             ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
                         val interval = (call.argument<Int>("intervalMinutes") ?: 30).coerceIn(10, 180)
                         val visibleSeconds = (call.argument<Int>("visibleSeconds") ?: 45).coerceIn(15, 180)
+                        val quietMode = call.argument<Boolean>("quietMode") ?: false
+                        val contextualMode = call.argument<Boolean>("contextualMode") ?: true
 
                         getSharedPreferences(prefsName, MODE_PRIVATE)
                             .edit()
                             .putStringSet("enabled_kinds", kinds)
                             .putInt("interval_minutes", interval)
                             .putInt("visible_seconds", visibleSeconds)
+                            .putBoolean("quiet_mode", quietMode)
+                            .putBoolean("contextual_mode", contextualMode)
                             .apply()
 
                         if (NafahatBubbleService.isRunning) {
