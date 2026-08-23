@@ -22,8 +22,19 @@ object PrayerWidgetScheduler {
     fun refresh(context: Context) {
         val prefs = HomeWidgetPlugin.getData(context)
         val now = System.currentTimeMillis()
-        val next = readSchedule(prefs.getString("prayer_schedule_json", null))
+
+        val scheduleNext = readSchedule(prefs.getString("prayer_schedule_json", null))
             .firstOrNull { it.atMillis > now }
+
+        val cachedName = prefs.getString("next_prayer", null)
+        val cachedAt = prefs.getLong("next_prayer_at", 0L)
+        val cachedNext = if (!cachedName.isNullOrBlank() && cachedAt > now) {
+            PrayerPoint(cachedName, cachedAt)
+        } else {
+            null
+        }
+
+        val next = scheduleNext ?: cachedNext
 
         if (next == null) {
             updateEmptyState(context)
@@ -90,13 +101,6 @@ object PrayerWidgetScheduler {
         val remainingLabel = if (isArabic) "متبقي" else "remaining"
 
         val nextLower = next.name.lowercase()
-        val bgRes = when (nextLower) {
-            "fajr", "sunrise" -> R.drawable.widget_bg_fajr
-            "dhuhr" -> R.drawable.widget_bg_dhuhr
-            "asr" -> R.drawable.widget_bg_asr
-            "maghrib" -> R.drawable.widget_bg_maghrib
-            else -> R.drawable.widget_bg_isha
-        }
         val iconRes = when (nextLower) {
             "fajr", "maghrib", "isha" -> R.drawable.ic_crescent
             else -> R.drawable.ic_sun
@@ -117,7 +121,7 @@ object PrayerWidgetScheduler {
             views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
             views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
-            views.setInt(R.id.widget_root, "setBackgroundResource", bgRes)
+            views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
 
             val remaining = (next.atMillis - now).coerceAtLeast(0L)
             val chronometerBase = SystemClock.elapsedRealtime() + remaining
@@ -188,6 +192,7 @@ object PrayerWidgetScheduler {
             val ids = manager.getAppWidgetIds(ComponentName(context, provider))
             for (id in ids) {
                 val views = RemoteViews(context.packageName, layout)
+                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
                 views.setViewVisibility(R.id.widget_active_layout, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_layout, View.VISIBLE)
                 views.setTextViewText(R.id.widget_empty_message, message)
