@@ -75,6 +75,11 @@ class PrayerProvider with ChangeNotifier {
     language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
+    await WidgetService.savePreferences(
+      languageCode: languageCode,
+      use24HourFormat: use24HourFormat,
+    );
+    _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
 
@@ -83,6 +88,11 @@ class PrayerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language', normalized);
     language = normalized == 'en' ? 'English' : 'العربية';
+    await WidgetService.savePreferences(
+      languageCode: languageCode,
+      use24HourFormat: use24HourFormat,
+    );
+    _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
 
@@ -97,6 +107,10 @@ class PrayerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use24HourFormat', value);
     use24HourFormat = value;
+    await WidgetService.savePreferences(
+      languageCode: languageCode,
+      use24HourFormat: use24HourFormat,
+    );
     _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
@@ -162,7 +176,7 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
 
     final widgetStateKey =
-        '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}';
+        '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
     if (forceWidgetUpdate || widgetStateKey != _lastWidgetStateKey) {
       _lastWidgetStateKey = widgetStateKey;
       WidgetService.updateWidget(
@@ -172,6 +186,8 @@ class PrayerProvider with ChangeNotifier {
         nextPrayer: _nextPrayerName,
         timeLeft: timeLeftFormatted,
         nextPrayerTime: _nextPrayerTime,
+        languageCode: languageCode,
+        use24HourFormat: use24HourFormat,
       );
     }
   }
