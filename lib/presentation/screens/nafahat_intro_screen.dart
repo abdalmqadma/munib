@@ -88,8 +88,8 @@ class NafahatIntroScreen extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   t(
-                    'آية بتفسير مختصر، حديث، ذكر بفضله أو أثر طيب يظهر في فقاعة خفيفة فوق التطبيقات. اسحبها وستلتصق بأقرب حافة، وافتحها عندما تحتاج نفحة طيبة خلال يومك.',
-                    'A verse with short tafsir, a hadith, an adhkar virtue or a gentle reflection in a lightweight floating bubble. Drag it and it snaps to the nearest edge; open it whenever you want a small reminder during the day.',
+                    'نفحات ليست فقاعة دائمة. أنت تختار كل كم تظهر وكم ثانية تبقى، ثم تختفي وحدها. افتحها لآية بتفسير مختصر وسبب نزول موثوق عندما يتوفر، أو حديث مع فائدته، أو ذكر مع فضله، أو أثر طيب.',
+                    'Nafahat is not a permanent bubble. You choose how often it appears and how many seconds it stays, then it disappears on its own. Open it for a verse with short tafsir and reliably sourced context when available, a hadith with benefit, an adhkar virtue, or a gentle reflection.',
                   ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(
@@ -109,13 +109,13 @@ class NafahatIntroScreen extends StatelessWidget {
                   child: Column(
                     children: [
                       _Benefit(
-                        icon: Icons.swipe_rounded,
-                        text: t('تلتصق بأقرب حافة ولا تعيق أزرار النظام', 'Snaps to the nearest edge and avoids system controls'),
+                        icon: Icons.schedule_rounded,
+                        text: t('أنت تحدد وقت الظهور ومدة بقاء النفحة', 'You control when it appears and how long it stays'),
                       ),
                       const SizedBox(height: 14),
                       _Benefit(
-                        icon: Icons.tune_rounded,
-                        text: t('اختر نوع المحتوى ووقت التجديد والوضع الهادئ', 'Choose content types, refresh interval and quiet mode'),
+                        icon: Icons.swipe_rounded,
+                        text: t('تلتصق بأقرب حافة ويمكنك إخفاؤها فوراً', 'It snaps to the nearest edge and can be dismissed instantly'),
                       ),
                       const SizedBox(height: 14),
                       _Benefit(
