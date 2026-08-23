@@ -99,10 +99,16 @@ object PrayerWidgetScheduler {
             }
 
             val nextLower = next.name.lowercase()
+            val bgRes = when (nextLower) {
+                "fajr", "sunrise" -> R.drawable.widget_bg_fajr
+                "dhuhr" -> R.drawable.widget_bg_dhuhr
+                "asr" -> R.drawable.widget_bg_asr
+                "maghrib" -> R.drawable.widget_bg_maghrib
+                else -> R.drawable.widget_bg_isha
+            }
+            views.setInt(R.id.widget_root, "setBackgroundResource", bgRes)
 
             if (layoutRes == R.layout.widget_medium) {
-                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_blue_card)
-
                 val iconRes = when (nextLower) {
                     "fajr", "maghrib", "isha" -> R.drawable.ic_crescent
                     else -> R.drawable.ic_sun
@@ -119,15 +125,6 @@ object PrayerWidgetScheduler {
                 val timePattern = if (use24Hour) "HH:mm" else "h:mm a"
                 val timeFormat = SimpleDateFormat(timePattern, locale)
                 views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
-            } else {
-                val bgRes = when (nextLower) {
-                    "fajr", "sunrise" -> R.drawable.widget_bg_fajr
-                    "dhuhr" -> R.drawable.widget_bg_dhuhr
-                    "asr" -> R.drawable.widget_bg_asr
-                    "maghrib" -> R.drawable.widget_bg_maghrib
-                    else -> R.drawable.widget_bg_isha
-                }
-                views.setInt(R.id.widget_root, "setBackgroundResource", bgRes)
             }
 
             manager.updateAppWidget(id, views)
@@ -190,7 +187,6 @@ object PrayerWidgetScheduler {
                 views.setViewVisibility(R.id.widget_active_layout, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_layout, View.VISIBLE)
                 if (layout == R.layout.widget_medium) {
-                    views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_blue_card)
                     views.setTextViewText(
                         R.id.widget_empty_message,
                         if (isArabic) "افتح التطبيق مرة واحدة لتحميل المواقيت"
