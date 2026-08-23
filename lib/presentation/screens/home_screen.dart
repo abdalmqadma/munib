@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/models/prayer_day.dart';
@@ -21,6 +20,7 @@ import 'widget_preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -51,12 +51,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final screens = <Widget>[
-      HomeContent(onStartTraining: () => _goTo(2)),
+      const HomeContent(),
       const AzkarScreen(),
       const WidgetPreviewScreen(),
       const SettingsScreen(),
     ];
+
     return Scaffold(
       body: PageView(
         controller: _pageController,
@@ -70,7 +72,10 @@ class _HomeScreenState extends State<HomeScreen> {
         items: [
           BottomNavigationBarItem(icon: const Icon(Icons.home_filled), label: context.tr('home')),
           BottomNavigationBarItem(icon: const Icon(Icons.nightlight_round), label: context.tr('azkar')),
-          BottomNavigationBarItem(icon: const Icon(Icons.auto_awesome_outlined), label: context.tr('training')),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.bubble_chart_rounded),
+            label: isArabic ? 'نفحات' : 'Reflections',
+          ),
           BottomNavigationBarItem(icon: const Icon(Icons.settings_outlined), label: context.tr('settings')),
         ],
       ),
@@ -79,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class HomeContent extends StatefulWidget {
-  final VoidCallback onStartTraining;
-  const HomeContent({super.key, required this.onStartTraining});
+  const HomeContent({super.key});
+
   @override
   State<HomeContent> createState() => _HomeContentState();
 }
@@ -89,86 +94,12 @@ class _HomeContentState extends State<HomeContent> {
   bool _isAutoFetching = false;
   String? _locationName;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showCoachIntroOnce());
-  }
-
-  Future<void> _showCoachIntroOnce() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('prayerCoachIntroShown') ?? false) return;
-    await Future.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
-
-    await prefs.setBool('prayerCoachIntroShown', true);
-    if (!mounted) return;
-
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (sheetContext) {
-        final theme = Theme.of(sheetContext);
-        final scheme = theme.colorScheme;
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Icon(Icons.accessibility_new_rounded, color: scheme.primary, size: 32),
-                ),
-                const SizedBox(height: 16),
-                Text(context.tr('newFeature'), style: theme.textTheme.labelLarge?.copyWith(color: scheme.primary)),
-                const SizedBox(height: 6),
-                Text(context.tr('coachIntroTitle'), textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
-                const SizedBox(height: 10),
-                Text(context.tr('coachIntroBody'), textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      widget.onStartTraining();
-                    },
-                    icon: const Icon(Icons.auto_awesome_rounded),
-                    label: Text(context.tr('tryNow')),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => Navigator.pop(sheetContext),
-                  child: Text(context.tr('later')),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _fetchByLocation() async {
     if (_isAutoFetching) return;
     setState(() => _isAutoFetching = true);
     final provider = context.read<PrayerProvider>();
     try {
-      // This method is only called from an explicit user action (button or
-      // pull-to-refresh), so this is the only place we allow the OS permission
-      // prompt to appear.
-      final location = await LocationService().getCurrentLocation(
-        requestPermission: true,
-      );
+      final location = await LocationService().getCurrentLocation(requestPermission: true);
       if (mounted) setState(() => _locationName = location.city);
       final data = await AIService().fetchPrayerTimesByCoordinates(
         location.latitude,
@@ -222,63 +153,109 @@ class _HomeContentState extends State<HomeContent> {
 class _HomeHeader extends StatelessWidget {
   final String locationName;
   const _HomeHeader({required this.locationName});
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final scheme = Theme.of(context).colorScheme;
     final effectiveLocation = locationName.trim().isEmpty || locationName == 'غير محدد'
-        ? context.tr('locationUnknown') : locationName;
-    return Row(children: [
-      InkWell(
-        borderRadius: BorderRadius.circular(24),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
-        child: CircleAvatar(
-          radius: 23,
-          backgroundColor: scheme.primaryContainer,
-          foregroundImage: user?.photoURL?.isNotEmpty == true ? NetworkImage(user!.photoURL!) : null,
-          child: user?.photoURL?.isNotEmpty == true ? null : Icon(Icons.person_rounded, color: scheme.primary),
+        ? context.tr('locationUnknown')
+        : locationName;
+
+    return Row(
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ProfileScreen()),
+          ),
+          child: CircleAvatar(
+            radius: 23,
+            backgroundColor: scheme.primaryContainer,
+            foregroundImage: user?.photoURL?.isNotEmpty == true ? NetworkImage(user!.photoURL!) : null,
+            child: user?.photoURL?.isNotEmpty == true ? null : Icon(Icons.person_rounded, color: scheme.primary),
+          ),
         ),
-      ),
-      const SizedBox(width: 14),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(context.tr('hello'), style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 3),
-        Row(children: [
-          Icon(Icons.location_on_outlined, size: 15, color: scheme.primary),
-          const SizedBox(width: 4),
-          Flexible(child: Text(effectiveLocation, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)),
-        ]),
-      ])),
-      IconButton.filledTonal(
-        tooltip: context.tr('notifications'),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen())),
-        icon: const Icon(Icons.notifications_none_rounded),
-      ),
-    ]);
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(context.tr('hello'), style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  Icon(Icons.location_on_outlined, size: 15, color: scheme.primary),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      effectiveLocation,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        IconButton.filledTonal(
+          tooltip: context.tr('notifications'),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen()),
+          ),
+          icon: const Icon(Icons.notifications_none_rounded),
+        ),
+      ],
+    );
   }
 }
 
 class _NextPrayerSummary extends StatelessWidget {
   final PrayerProvider provider;
   const _NextPrayerSummary({required this.provider});
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(28), border: Border.all(color: scheme.outline)),
-      child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(context.tr('nextPrayer'), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 6),
-          Text(_localizedPrayer(context, provider.nextPrayerName), style: Theme.of(context).textTheme.headlineSmall),
-        ])),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Icon(Icons.schedule_rounded, color: scheme.primary),
-          const SizedBox(height: 6),
-          Text(provider.timeLeftFormatted, textDirection: TextDirection.ltr, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-        ]),
-      ]),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: scheme.outline),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(context.tr('nextPrayer'), style: Theme.of(context).textTheme.bodySmall),
+                const SizedBox(height: 6),
+                Text(_localizedPrayer(context, provider.nextPrayerName), style: Theme.of(context).textTheme.headlineSmall),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Icon(Icons.schedule_rounded, color: scheme.primary),
+              const SizedBox(height: 6),
+              Text(
+                provider.timeLeftFormatted,
+                textDirection: TextDirection.ltr,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -286,6 +263,7 @@ class _NextPrayerSummary extends StatelessWidget {
 class _PrayerTimesSection extends StatelessWidget {
   final PrayerProvider provider;
   const _PrayerTimesSection({required this.provider});
+
   @override
   Widget build(BuildContext context) {
     final day = provider.currentDay;
@@ -298,19 +276,24 @@ class _PrayerTimesSection extends StatelessWidget {
       ('maghrib', day.maghrib, Icons.sunny_snowing, 'Maghrib'),
       ('isha', day.isha, Icons.nightlight_outlined, 'Isha'),
     ];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(context.tr('todayPrayerTimes'), style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 14),
-      ...rows.map((row) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: PrayerGridItem(
-          name: context.tr(row.$1),
-          time: provider.formatPrayerTime(row.$2),
-          icon: row.$3,
-          isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(context.tr('todayPrayerTimes'), style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 14),
+        ...rows.map(
+          (row) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: PrayerGridItem(
+              name: context.tr(row.$1),
+              time: provider.formatPrayerTime(row.$2),
+              icon: row.$3,
+              isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase(),
+            ),
+          ),
         ),
-      )),
-    ]);
+      ],
+    );
   }
 }
 
@@ -318,30 +301,53 @@ class _EmptyState extends StatelessWidget {
   final bool loading;
   final Future<void> Function() onFetch;
   const _EmptyState({required this.loading, required this.onFetch});
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(28), border: Border.all(color: scheme.outline)),
-      child: Column(children: [
-        Icon(Icons.my_location_rounded, size: 64, color: scheme.primary),
-        const SizedBox(height: 18),
-        Text(context.tr('noPrayerTimes'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: 10),
-        Text(context.tr('uploadOrLocation'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
-        const SizedBox(height: 24),
-        if (loading) const CircularProgressIndicator() else ...[
-          SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: onFetch, icon: const Icon(Icons.my_location_rounded), label: Text(context.tr('fetchCityTimes')))),
-          const SizedBox(height: 12),
-          Text(context.tr('or'), style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 12),
-          SizedBox(width: double.infinity, child: OutlinedButton.icon(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadScreen())),
-            icon: const Icon(Icons.upload_file_rounded), label: Text(context.tr('uploadImsakia')),
-          )),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: scheme.outline),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.my_location_rounded, size: 64, color: scheme.primary),
+          const SizedBox(height: 18),
+          Text(context.tr('noPrayerTimes'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 10),
+          Text(context.tr('uploadOrLocation'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 24),
+          if (loading)
+            const CircularProgressIndicator()
+          else ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: onFetch,
+                icon: const Icon(Icons.my_location_rounded),
+                label: Text(context.tr('fetchCityTimes')),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(context.tr('or'), style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const UploadScreen()),
+                ),
+                icon: const Icon(Icons.upload_file_rounded),
+                label: Text(context.tr('uploadImsakia')),
+              ),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
