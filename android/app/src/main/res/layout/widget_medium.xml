@@ -3,18 +3,21 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_bg_isha"
-    android:padding="9dp">
+    android:background="@drawable/widget_glass_background"
+    android:elevation="6dp"
+    android:padding="12dp">
 
-    <LinearLayout
+    <RelativeLayout
         android:id="@+id/widget_active_layout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical">
+        android:visibility="visible">
 
         <LinearLayout
+            android:id="@+id/widget_medium_top"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -22,6 +25,7 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
+                android:gravity="start"
                 android:orientation="vertical">
 
                 <TextView
@@ -30,27 +34,27 @@
                     android:layout_height="wrap_content"
                     android:maxLines="1"
                     android:text="الصلاة التالية"
-                    android:textColor="#9FFFFFFF"
+                    android:textColor="#BFFFFFFF"
                     android:textSize="8sp" />
 
                 <TextView
                     android:id="@+id/widget_next_prayer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="1dp"
+                    android:layout_marginTop="2dp"
                     android:maxLines="1"
                     android:text="المغرب"
-                    android:textColor="#FFDDAA55"
-                    android:textSize="14sp"
+                    android:textColor="#FFF4C76A"
+                    android:textSize="17sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <FrameLayout
                 android:id="@+id/widget_icon_container"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:background="@drawable/widget_prayer_icon_circle"
-                android:padding="7dp">
+                android:padding="8dp">
 
                 <ImageView
                     android:id="@+id/widget_bg_icon"
@@ -62,76 +66,91 @@
             </FrameLayout>
         </LinearLayout>
 
-        <Chronometer
-            android:id="@+id/widget_time_left"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:fontFamily="sans-serif-medium"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:textColor="#FFFFFFFF"
-            android:textSize="27sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/widget_remaining_label"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="1dp"
-            android:maxLines="1"
-            android:text="متبقي"
-            android:textColor="#8FFFFFFF"
-            android:textSize="8sp" />
-
-        <View
+        <LinearLayout
+            android:id="@+id/widget_medium_hero"
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="5dp"
-            android:background="#22FFFFFF" />
+            android:layout_height="wrap_content"
+            android:layout_below="@id/widget_medium_top"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/widget_glass_panel"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp">
+
+            <Chronometer
+                android:id="@+id/widget_time_left"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:textColor="#FFFFFFFF"
+                android:textSize="29sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_remaining_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:maxLines="1"
+                android:text="متبقي"
+                android:textColor="#FFF4C76A"
+                android:textSize="9sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/widget_dhikr"
             android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:maxLines="2"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/widget_medium_hero"
+            android:layout_above="@id/widget_medium_bottom"
             android:ellipsize="end"
+            android:gravity="center_vertical|start"
+            android:maxLines="2"
+            android:paddingTop="7dp"
+            android:paddingBottom="5dp"
             android:text="أستغفر الله وأتوب إليه"
             android:textColor="#E6FFFFFF"
             android:textDirection="locale"
-            android:textSize="8sp" />
+            android:textSize="9sp" />
 
         <LinearLayout
+            android:id="@+id/widget_medium_bottom"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
             android:gravity="center_vertical"
             android:orientation="horizontal">
-
-            <TextView
-                android:id="@+id/widget_current_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:text="18:29"
-                android:textColor="#FFFFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/widget_date"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:gravity="end"
-                android:maxLines="1"
                 android:ellipsize="end"
+                android:gravity="start"
+                android:maxLines="1"
                 android:text="الأحد 23 أغسطس"
                 android:textColor="#BFFFFFFF"
-                android:textSize="7sp" />
+                android:textSize="8sp" />
+
+            <TextView
+                android:id="@+id/widget_current_time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:maxLines="1"
+                android:text="18:29"
+                android:textColor="#FFFFFFFF"
+                android:textSize="11sp"
+                android:textStyle="bold" />
         </LinearLayout>
-    </LinearLayout>
+    </RelativeLayout>
 
     <LinearLayout
         android:id="@+id/widget_empty_layout"
@@ -141,24 +160,29 @@
         android:orientation="vertical"
         android:visibility="gone">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="مُنيب"
-            android:textColor="#FFFFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold" />
+        <FrameLayout
+            android:layout_width="38dp"
+            android:layout_height="38dp"
+            android:background="@drawable/widget_prayer_icon_circle"
+            android:padding="9dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_crescent" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/widget_empty_message"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="8dp"
             android:gravity="center"
             android:maxLines="3"
             android:text="افتح التطبيق مرة واحدة لتحميل المواقيت"
-            android:textColor="#D9FFFFFF"
-            android:textSize="8sp" />
+            android:textColor="#E6FFFFFF"
+            android:textSize="9sp" />
     </LinearLayout>
 
 </FrameLayout>
