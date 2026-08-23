@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_isha"
-    android:padding="18dp">
+    android:padding="11dp">
 
     <LinearLayout
         android:id="@+id/widget_active_layout"
@@ -30,23 +30,23 @@
                     android:layout_height="wrap_content"
                     android:text="مواقيت مُنيب"
                     android:textColor="#AFFFFFFF"
-                    android:textSize="11sp" />
+                    android:textSize="9sp" />
 
                 <TextClock
                     android:id="@+id/widget_current_time"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="1dp"
                     android:format12Hour="h:mm a"
                     android:format24Hour="HH:mm"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="32sp"
+                    android:textSize="23sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
             <ImageView
-                android:layout_width="42dp"
-                android:layout_height="42dp"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:alpha="0.45"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_crescent" />
@@ -55,11 +55,14 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="6dp"
             android:background="@drawable/widget_pill_bg"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:padding="16dp">
+            android:paddingStart="10dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -72,16 +75,17 @@
                     android:layout_height="wrap_content"
                     android:text="الصلاة التالية"
                     android:textColor="#9FFFFFFF"
-                    android:textSize="10sp" />
+                    android:textSize="8sp" />
 
                 <TextView
                     android:id="@+id/widget_next_prayer"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
+                    android:layout_marginTop="1dp"
+                    android:maxLines="1"
                     android:text="Isha"
                     android:textColor="#FFDDAA55"
-                    android:textSize="22sp"
+                    android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -95,8 +99,9 @@
                     android:id="@+id/widget_time_left"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:maxLines="1"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="22sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -104,19 +109,21 @@
                     android:layout_height="wrap_content"
                     android:text="متبقي"
                     android:textColor="#8FFFFFFF"
-                    android:textSize="9sp" />
+                    android:textSize="8sp" />
             </LinearLayout>
         </LinearLayout>
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="15dp"
+            android:layout_marginTop="5dp"
+            android:ellipsize="end"
             android:gravity="center"
+            android:maxLines="1"
             android:text="اللهم أعنّي على ذكرك وشكرك وحسن عبادتك"
             android:textColor="#D8FFFFFF"
             android:textDirection="rtl"
-            android:textSize="13sp" />
+            android:textSize="9sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -132,16 +139,18 @@
             android:layout_height="wrap_content"
             android:text="مُنيب"
             android:textColor="#FFFFFFFF"
-            android:textSize="22sp"
+            android:textSize="17sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="3dp"
+            android:gravity="center"
+            android:maxLines="2"
             android:text="افتح التطبيق لتحديث مواقيت الصلاة"
             android:textColor="#AFFFFFFF"
-            android:textSize="12sp" />
+            android:textSize="9sp" />
     </LinearLayout>
 
 </FrameLayout>
