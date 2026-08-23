@@ -4,59 +4,59 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg_isha"
-    android:padding="14dp">
+    android:padding="9dp">
 
     <LinearLayout
         android:id="@+id/widget_active_layout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center_vertical"
+        android:gravity="center"
         android:orientation="vertical"
         android:visibility="visible">
 
-        <LinearLayout
-            android:layout_width="match_parent"
+        <TextClock
+            android:id="@+id/widget_current_time"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:format12Hour="h:mm a"
+            android:format24Hour="HH:mm"
+            android:gravity="center"
+            android:maxLines="1"
+            android:textColor="#CFFFFFFF"
+            android:textSize="9sp" />
 
-            <TextView
-                android:id="@+id/widget_next_prayer"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:maxLines="1"
-                android:text="Isha"
-                android:textColor="#FFDDAA55"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-
-            <TextClock
-                android:id="@+id/widget_current_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:format12Hour="h:mm a"
-                android:format24Hour="HH:mm"
-                android:textColor="#DFFFFFFF"
-                android:textSize="12sp" />
-        </LinearLayout>
+        <TextView
+            android:id="@+id/widget_next_prayer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="Isha"
+            android:textColor="#FFDDAA55"
+            android:textSize="13sp"
+            android:textStyle="bold" />
 
         <Chronometer
             android:id="@+id/widget_time_left"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="7dp"
+            android:layout_marginTop="3dp"
+            android:gravity="center"
+            android:maxLines="1"
             android:textColor="#FFFFFFFF"
-            android:textSize="26sp"
+            android:textSize="21sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="1dp"
-            android:text="متبقي للصلاة"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="متبقي"
             android:textColor="#99FFFFFF"
-            android:textSize="10sp" />
+            android:textSize="8sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -70,19 +70,21 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:gravity="center"
             android:text="مُنيب"
             android:textColor="#FFFFFFFF"
-            android:textSize="17sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
+            android:layout_marginTop="3dp"
             android:gravity="center"
+            android:maxLines="3"
             android:text="افتح التطبيق لتحديث المواقيت"
             android:textColor="#AFFFFFFF"
-            android:textSize="10sp" />
+            android:textSize="8sp" />
     </LinearLayout>
 
 </FrameLayout>
