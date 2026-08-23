@@ -17,8 +17,8 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
   bool _loading = true;
   bool _permission = false;
   bool _running = false;
-  bool _quietMode = false;
   int _intervalMinutes = 30;
+  int _visibleSeconds = 45;
   Set<String> _enabledKinds = {'آية', 'حديث', 'ذكر', 'أثر طيب'};
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
@@ -52,7 +52,7 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
         _permission = permission;
         _running = running;
         _intervalMinutes = (raw?['intervalMinutes'] as int?) ?? 30;
-        _quietMode = (raw?['quietMode'] as bool?) ?? false;
+        _visibleSeconds = (raw?['visibleSeconds'] as int?) ?? 45;
         final kinds = (raw?['enabledKinds'] as List?)?.whereType<String>().toSet();
         if (kinds != null && kinds.isNotEmpty) _enabledKinds = kinds;
         _loading = false;
@@ -66,7 +66,7 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
     await _channel.invokeMethod('setNafahatSettings', {
       'enabledKinds': _enabledKinds.toList(),
       'intervalMinutes': _intervalMinutes,
-      'quietMode': _quietMode,
+      'visibleSeconds': _visibleSeconds,
     });
   }
 
@@ -106,14 +106,14 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
         children: [
           Text(
-            t('نفحات', 'Reflections'),
+            t('نفحات', 'Nafahat'),
             style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
           Text(
             t(
-              'فقاعة خفيفة تلتصق بأقرب حافة وتعرض آية بتفسيرها، حديثاً، ذكراً بفضله أو أثراً طيباً من محتوى ثابت داخل منيب.',
-              'A lightweight edge-snapping bubble with verses and short tafsir, hadith, adhkar with virtues, and gentle reminders from fixed local content.',
+              'نفحة تظهر لفترة قصيرة حسب الجدول الذي تختاره، ثم تختفي وحدها. ليست فقاعة دائمة على الشاشة.',
+              'A reflection appears briefly on the schedule you choose, then disappears by itself. It is not a permanent floating bubble.',
             ),
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
@@ -130,11 +130,11 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
                   contentPadding: EdgeInsets.zero,
                   value: _running,
                   onChanged: _loading ? null : _toggle,
-                  secondary: Icon(Icons.bubble_chart_rounded, color: scheme.primary),
-                  title: Text(t('إظهار فقاعة نفحات', 'Show Nafahat bubble')),
+                  secondary: Icon(Icons.auto_awesome_rounded, color: scheme.primary),
+                  title: Text(t('تفعيل نفحات', 'Enable Nafahat')),
                   subtitle: Text(
                     _permission
-                        ? t('الصلاحية جاهزة', 'Permission ready')
+                        ? t('ستظهر فقط عند وقت النفحة', 'It will appear only when a reflection is due')
                         : t('يحتاج إذن الظهور فوق التطبيقات', 'Requires display-over-other-apps permission'),
                   ),
                 ),
@@ -157,8 +157,56 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t('المحتوى', 'Content'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 12),
+                Text(
+                  t('متى تظهر؟', 'When should it appear?'),
+                  style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: Text(t('كل', 'Every'))),
+                    DropdownButton<int>(
+                      value: _intervalMinutes,
+                      items: const [10, 20, 30, 60, 120]
+                          .map((m) => DropdownMenuItem(
+                                value: m,
+                                child: Text(_isArabic ? '$m دقيقة' : '$m min'),
+                              ))
+                          .toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        setState(() => _intervalMinutes = value);
+                        await _saveSettings();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(child: Text(t('تبقى ظاهرة لمدة', 'Stay visible for'))),
+                    DropdownButton<int>(
+                      value: _visibleSeconds,
+                      items: const [20, 30, 45, 60, 120]
+                          .map((s) => DropdownMenuItem(
+                                value: s,
+                                child: Text(_isArabic ? '$s ثانية' : '$s sec'),
+                              ))
+                          .toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        setState(() => _visibleSeconds = value);
+                        await _saveSettings();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  t('نوع المحتوى', 'Content types'),
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 10),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -169,38 +217,6 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
                     _kindChip('أثر طيب', 'Reflections'),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(child: Text(t('التجديد التلقائي', 'Auto refresh'))),
-                    DropdownButton<int>(
-                      value: _intervalMinutes,
-                      items: const [10, 20, 30, 60, 120]
-                          .map((m) => DropdownMenuItem(value: m, child: Text('$m min')))
-                          .toList(),
-                      onChanged: (value) async {
-                        if (value == null) return;
-                        setState(() => _intervalMinutes = value);
-                        await _saveSettings();
-                      },
-                    ),
-                  ],
-                ),
-                SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  value: _quietMode,
-                  onChanged: (value) async {
-                    setState(() => _quietMode = value);
-                    await _saveSettings();
-                  },
-                  title: Text(t('الوضع الهادئ', 'Quiet mode')),
-                  subtitle: Text(
-                    t(
-                      'تظهر الحلقة الذهبية عند وصول نفحة جديدة ثم تخفت الفقاعة بعد ثوانٍ إذا لم تفتحها.',
-                      'A gold ring marks new content, then the bubble gently dims if left unopened.',
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -210,28 +226,28 @@ class _WidgetPreviewScreenState extends State<WidgetPreviewScreen>
               children: [
                 _InfoRow(
                   icon: Icons.swipe_rounded,
-                  title: t('Sticky على الحواف', 'Edge snapping'),
+                  title: t('تلتصق بالحافة', 'Edge snapping'),
                   body: t(
-                    'إذا سحبت الفقاعة للنص ترجع بسلاسة إلى أقرب حافة يمين أو شمال مع إبقائها بعيداً عن شريط الإشعارات وأزرار التنقل.',
-                    'Dragging toward the middle smoothly snaps the bubble to the nearest left or right edge while avoiding system bars.',
+                    'إذا سحبتها للنص ترجع بسلاسة إلى أقرب حافة يمين أو شمال، وتبقى بعيدة عن شريط الإشعارات وأزرار التنقل.',
+                    'If dragged toward the middle, it smoothly snaps to the nearest left or right edge while staying clear of system bars.',
                   ),
                 ),
                 const SizedBox(height: 16),
                 _InfoRow(
                   icon: Icons.delete_outline_rounded,
-                  title: t('اسحب للحذف', 'Drag to remove'),
+                  title: t('تخلّص من النفحة الحالية', 'Dismiss the current reflection'),
                   body: t(
-                    'أثناء السحب يظهر هدف حذف فوق منطقة التنقل؛ أفلت الفقاعة عليه لإيقاف نفحات فوراً.',
-                    'A remove target appears above the navigation area while dragging; drop the bubble there to stop Nafahat.',
+                    'اسحب الفقاعة إلى علامة × أو اضغط إخفاء داخل البطاقة. تختفي النفحة الحالية فقط، وتعود نفحة جديدة في الموعد التالي. ولإيقاف الميزة نهائياً أطفئ المفتاح من هنا.',
+                    'Drag the bubble to × or tap Hide in the card. Only the current reflection disappears; the next one returns on schedule. Turn off the main switch to disable Nafahat completely.',
                   ),
                 ),
                 const SizedBox(height: 16),
                 _InfoRow(
                   icon: Icons.verified_outlined,
-                  title: t('المحتوى ثابت وموثوق', 'Fixed source content'),
+                  title: t('محتوى ديني ثابت', 'Fixed religious content'),
                   body: t(
-                    'النصوص الدينية لا يتم توليدها بالذكاء الاصطناعي. الآيات والأحاديث والأذكار محفوظة محلياً، ومع الآية يظهر تفسير مختصر وسبب النزول عندما نملك صياغة موثوقة.',
-                    'Religious text is never AI-generated. Verses, hadith and adhkar are local fixed content, with short tafsir and sabab al-nuzul only where confidently sourced.',
+                    'الذكر يظهر مع فضله، والحديث مع فائدته ومصدره، والآية مع تفسير مختصر وسبب النزول عندما يكون لدينا مصدر موثوق دون اختلاق رواية.',
+                    'Adhkar include their virtue, hadith include benefit and source, and verses include short tafsir plus sabab al-nuzul only when reliably sourced.',
                   ),
                 ),
               ],
@@ -305,7 +321,9 @@ class _PreviewCard extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF0B1F3A), Color(0xFF1E88E5)]),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0B1F3A), Color(0xFF1E88E5)],
+                  ),
                   shape: BoxShape.circle,
                   border: Border.all(color: const Color(0xFFF4C76A), width: 3),
                 ),
@@ -324,15 +342,16 @@ class _PreviewCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Text(
+          const Text(
             '﴿ألا بذكر الله تطمئن القلوب﴾',
             textAlign: TextAlign.right,
             textDirection: TextDirection.rtl,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Colors.white,
-                  height: 1.6,
-                  fontWeight: FontWeight.w700,
-                ),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 21,
+              height: 1.6,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 6),
           const Text(
@@ -345,7 +364,6 @@ class _PreviewCard extends StatelessWidget {
             isArabic
                 ? 'تفسير مختصر: تطمئن قلوب المؤمنين بذكر الله ومعرفته والأنس به.'
                 : 'Short tafsir: believers find reassurance in remembering and knowing Allah.',
-            textAlign: TextAlign.start,
             style: const TextStyle(color: Colors.white70, height: 1.45),
           ),
         ],
@@ -380,7 +398,10 @@ class _InfoRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
               const SizedBox(height: 3),
               Text(
                 body,
