@@ -31,9 +31,9 @@ class NafahatBubbleService : Service() {
     companion object {
         @Volatile var isRunning: Boolean = false
         const val ACTION_REFRESH_SETTINGS = "com.example.munib.NAFAHAT_REFRESH_SETTINGS"
-        private const val channelId = "nafahat_bubble"
-        private const val notificationId = 9127
-        private const val prefsName = "nafahat_prefs"
+        private const val CHANNEL_ID = "nafahat_bubble"
+        private const val NOTIFICATION_ID = 9127
+        private const val PREFS_NAME = "nafahat_prefs"
     }
 
     private data class Nafha(
@@ -46,11 +46,7 @@ class NafahatBubbleService : Service() {
         val extra: String? = null,
     )
 
-    /*
-     * Religious text is intentionally fixed local content rather than AI-generated.
-     * Tafsir lines are short summaries; where no specific sabab al-nuzul is included,
-     * we say so instead of inventing one.
-     */
+    // Religious text is fixed local content, never generated on-device by AI.
     private val items = listOf(
         Nafha(
             "آية",
@@ -73,14 +69,14 @@ class NafahatBubbleService : Service() {
             "سبحان الله وبحمده",
             "ذكر ثابت في السنة",
             "من فضائله",
-            "ذكرٌ عظيم الأجر، يجمع تنزيه الله وحمده، ويُستحب الإكثار منه.",
+            "ذكر عظيم الأجر، يجمع تنزيه الله وحمده، ويستحب الإكثار منه.",
         ),
         Nafha(
             "آية",
             "﴿ومن يتوكل على الله فهو حسبه﴾",
             "الطلاق: 3",
             "تفسير مختصر",
-            "من يعتمد على الله بصدقٍ مع أخذ الأسباب كفاه الله ما أهمّه.",
+            "من يعتمد على الله بصدق مع أخذ الأسباب كفاه الله ما أهمه.",
             "سبب النزول",
             "لا نعرض سبب نزول خاصاً لهذه الآية في النسخة الحالية لعدم الجزم برواية مخصوصة.",
         ),
@@ -89,21 +85,21 @@ class NafahatBubbleService : Service() {
             "الكلمة الطيبة صدقة",
             "متفق عليه",
             "الفائدة",
-            "الكلام الحسن والإحسان باللسان بابٌ من أبواب الصدقة اليومية.",
+            "الكلام الحسن والإحسان باللسان باب من أبواب الصدقة اليومية.",
         ),
         Nafha(
             "ذكر",
             "لا حول ولا قوة إلا بالله",
             "ذكر ثابت في السنة",
             "من فضائله",
-            "تفويضٌ واستعانة بالله، وتذكيرٌ بأن القوة والتوفيق منه سبحانه.",
+            "تفويض واستعانة بالله، وتذكير بأن القوة والتوفيق منه سبحانه.",
         ),
         Nafha(
             "آية",
             "﴿إن مع العسر يسرا﴾",
             "الشرح: 6",
             "تفسير مختصر",
-            "وعدٌ بأن الشدة لا تنفك عن تيسيرٍ وفرجٍ من الله.",
+            "وعد بأن الشدة لا تنفك عن تيسير وفرج من الله.",
             "سبب النزول",
             "لا نعرض سبب نزول خاصاً لهذه الآية في النسخة الحالية لعدم الجزم برواية مخصوصة.",
         ),
@@ -118,24 +114,26 @@ class NafahatBubbleService : Service() {
 
     private lateinit var wm: WindowManager
     private lateinit var bubble: TextView
+    private var bubbleAttached = false
+    private var bubbleParams: WindowManager.LayoutParams? = null
     private var card: LinearLayout? = null
     private var deleteTarget: TextView? = null
-    private var bubbleParams: WindowManager.LayoutParams? = null
     private var index = 0
     private var unread = true
     private var snapAnimator: ValueAnimator? = null
 
     private val handler = Handler(Looper.getMainLooper())
-    private val rotate = object : Runnable {
+
+    private val nextNafha = object : Runnable {
         override fun run() {
             selectNextItem()
-            markUnread()
-            updateCard()
-            scheduleNextRotation()
+            showCurrentNafha()
+            scheduleNextNafha()
         }
     }
-    private val quietDim = Runnable {
-        if (::bubble.isInitialized && card == null) bubble.alpha = 0.55f
+
+    private val autoDismiss = Runnable {
+        if (card == null) dismissCurrentBubble()
     }
 
     override fun onCreate() {
@@ -144,21 +142,19 @@ class NafahatBubbleService : Service() {
         createNotificationChannel()
         startForegroundNotification()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        showBubble()
-        scheduleNextRotation()
-        scheduleQuietDim()
+        createBubbleIfNeeded()
+        showCurrentNafha()
+        scheduleNextNafha()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_REFRESH_SETTINGS) {
-            handler.removeCallbacks(rotate)
-            scheduleNextRotation()
-            scheduleQuietDim()
-            if (currentFilteredItems().none { it == items[index] }) {
-                selectNextItem()
-                markUnread()
-                updateCard()
-            }
+            handler.removeCallbacks(nextNafha)
+            handler.removeCallbacks(autoDismiss)
+            if (currentFilteredItems().none { it == items[index] }) selectNextItem()
+            if (bubbleAttached) scheduleAutoDismiss()
+            scheduleNextNafha()
+            updateCard()
         }
         return START_STICKY
     }
@@ -166,21 +162,19 @@ class NafahatBubbleService : Service() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         snapAnimator?.cancel()
-        if (::bubble.isInitialized) runCatching { wm.removeView(bubble) }
-        card?.let { runCatching { wm.removeView(it) } }
-        deleteTarget?.let { runCatching { wm.removeView(it) } }
-        card = null
-        deleteTarget = null
+        removeCard()
+        hideDeleteTarget()
+        if (bubbleAttached) runCatching { wm.removeView(bubble) }
+        bubbleAttached = false
         isRunning = false
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun prefs() = getSharedPreferences(prefsName, MODE_PRIVATE)
-
+    private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
     private fun intervalMinutes(): Int = prefs().getInt("interval_minutes", 30).coerceIn(10, 180)
-    private fun quietMode(): Boolean = prefs().getBoolean("quiet_mode", false)
+    private fun visibleSeconds(): Int = prefs().getInt("visible_seconds", 45).coerceIn(15, 180)
 
     private fun enabledKinds(): Set<String> {
         val saved = prefs().getStringSet("enabled_kinds", null)
@@ -189,7 +183,7 @@ class NafahatBubbleService : Service() {
 
     private fun currentFilteredItems(): List<Nafha> {
         val kinds = enabledKinds()
-        return items.filter { kinds.contains(it.kind) }.ifEmpty { items }
+        return items.filter { it.kind in kinds }.ifEmpty { items }
     }
 
     private fun selectNextItem() {
@@ -197,8 +191,6 @@ class NafahatBubbleService : Service() {
         val current = items[index]
         val currentPos = available.indexOf(current)
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-
-        // Morning/evening gently prioritise adhkar when the user enabled them.
         val preferredKind = if (hour in 5..9 || hour in 17..22) "ذكر" else null
         val preferred = preferredKind?.let { kind -> available.filter { it.kind == kind } }.orEmpty()
 
@@ -210,25 +202,50 @@ class NafahatBubbleService : Service() {
         index = items.indexOf(next).coerceAtLeast(0)
     }
 
-    private fun scheduleNextRotation() {
-        handler.removeCallbacks(rotate)
-        handler.postDelayed(rotate, intervalMinutes() * 60_000L)
+    private fun scheduleNextNafha() {
+        handler.removeCallbacks(nextNafha)
+        handler.postDelayed(nextNafha, intervalMinutes() * 60_000L)
     }
 
-    private fun scheduleQuietDim() {
-        handler.removeCallbacks(quietDim)
-        if (!::bubble.isInitialized) return
-        bubble.alpha = 1f
-        if (quietMode()) handler.postDelayed(quietDim, 12_000L)
+    private fun scheduleAutoDismiss() {
+        handler.removeCallbacks(autoDismiss)
+        handler.postDelayed(autoDismiss, visibleSeconds() * 1000L)
     }
 
-    private fun overlayType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-    } else {
-        @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+    private fun showCurrentNafha() {
+        createBubbleIfNeeded()
+        unread = true
+        bubble.setBackgroundResource(R.drawable.nafahat_bubble_unread_bg)
+        bubble.alpha = 0f
+        if (!bubbleAttached) {
+            wm.addView(bubble, bubbleParams)
+            bubbleAttached = true
+        }
+        bubble.animate().cancel()
+        bubble.animate().alpha(1f).setDuration(220L).start()
+        snapToNearestEdge()
+        scheduleAutoDismiss()
     }
 
-    private fun showBubble() {
+    private fun dismissCurrentBubble() {
+        handler.removeCallbacks(autoDismiss)
+        removeCard()
+        hideDeleteTarget()
+        if (!bubbleAttached) return
+        bubble.animate().cancel()
+        bubble.animate()
+            .alpha(0f)
+            .setDuration(180L)
+            .withEndAction {
+                if (bubbleAttached) runCatching { wm.removeView(bubble) }
+                bubbleAttached = false
+            }
+            .start()
+    }
+
+    private fun createBubbleIfNeeded() {
+        if (::bubble.isInitialized) return
+
         bubble = TextView(this).apply {
             text = "✦"
             textSize = 26f
@@ -243,12 +260,11 @@ class NafahatBubbleService : Service() {
             size,
             size,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = dp(12)
+            x = screenWidth() - size - dp(10)
             y = safeTop() + dp(90)
         }
         bubbleParams = params
@@ -263,15 +279,14 @@ class NafahatBubbleService : Service() {
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     snapAnimator?.cancel()
+                    handler.removeCallbacks(autoDismiss)
                     startX = params.x
                     startY = params.y
                     touchX = event.rawX
                     touchY = event.rawY
                     moved = false
-                    bubble.alpha = 1f
                     true
                 }
-
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - touchX).toInt()
                     val dy = (event.rawY - touchY).toInt()
@@ -281,35 +296,34 @@ class NafahatBubbleService : Service() {
                     }
                     params.x = (startX + dx).coerceIn(0, screenWidth() - size)
                     params.y = (startY + dy).coerceIn(safeTop(), safeBottom() - size)
-                    wm.updateViewLayout(bubble, params)
+                    if (bubbleAttached) wm.updateViewLayout(bubble, params)
                     updateDeleteTargetState(event.rawX, event.rawY)
                     true
                 }
-
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val shouldDelete = moved && isInsideDeleteTarget(event.rawX, event.rawY)
+                    val shouldDismiss = moved && isInsideDeleteTarget(event.rawX, event.rawY)
                     hideDeleteTarget()
-                    if (shouldDelete) {
-                        stopSelf()
-                    } else if (!moved) {
-                        markRead()
-                        toggleCard()
-                    } else {
-                        snapToNearestEdge()
+                    when {
+                        shouldDismiss -> dismissCurrentBubble()
+                        !moved -> {
+                            markRead()
+                            toggleCard()
+                        }
+                        else -> {
+                            snapToNearestEdge()
+                            scheduleAutoDismiss()
+                        }
                     }
-                    scheduleQuietDim()
                     true
                 }
-
                 else -> false
             }
         }
-        wm.addView(bubble, params)
-        snapToNearestEdge()
     }
 
     private fun snapToNearestEdge() {
         val params = bubbleParams ?: return
+        if (!bubbleAttached) return
         val size = dp(58)
         val edge = dp(10)
         val midpoint = screenWidth() / 2
@@ -322,7 +336,7 @@ class NafahatBubbleService : Service() {
             interpolator = AccelerateDecelerateInterpolator()
             addUpdateListener { animator ->
                 params.x = animator.animatedValue as Int
-                if (::bubble.isInitialized) runCatching { wm.updateViewLayout(bubble, params) }
+                if (bubbleAttached) runCatching { wm.updateViewLayout(bubble, params) }
             }
             start()
         }
@@ -379,15 +393,6 @@ class NafahatBubbleService : Service() {
         deleteTarget = null
     }
 
-    private fun markUnread() {
-        unread = true
-        if (::bubble.isInitialized) {
-            bubble.setBackgroundResource(R.drawable.nafahat_bubble_unread_bg)
-            bubble.alpha = 1f
-        }
-        scheduleQuietDim()
-    }
-
     private fun markRead() {
         unread = false
         bubble.setBackgroundResource(R.drawable.nafahat_bubble_bg)
@@ -396,10 +401,11 @@ class NafahatBubbleService : Service() {
 
     private fun toggleCard() {
         if (card != null) {
-            wm.removeView(card)
-            card = null
+            removeCard()
+            scheduleAutoDismiss()
             return
         }
+        handler.removeCallbacks(autoDismiss)
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -407,60 +413,25 @@ class NafahatBubbleService : Service() {
             setBackgroundResource(R.drawable.nafahat_card_bg)
             elevation = 18f
         }
-        val title = TextView(this).apply {
-            tag = "nafha_title"
-            setTextColor(Color.rgb(244, 199, 106))
-            textSize = 13f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
-        }
-        val body = TextView(this).apply {
-            tag = "nafha_body"
-            setTextColor(Color.WHITE)
-            textSize = 17f
-            setLineSpacing(0f, 1.25f)
-            gravity = Gravity.END
+        val title = textView("nafha_title", 13f, Color.rgb(244, 199, 106), true)
+        val body = textView("nafha_body", 17f, Color.WHITE, true).apply {
             textDirection = View.TEXT_DIRECTION_RTL
             setPadding(0, dp(10), 0, dp(7))
         }
-        val source = TextView(this).apply {
-            tag = "nafha_source"
-            setTextColor(Color.rgb(244, 199, 106))
-            textSize = 11f
-            gravity = Gravity.END
-        }
-        val detailTitle = TextView(this).apply {
-            tag = "nafha_detail_title"
-            setTextColor(Color.rgb(169, 176, 181))
-            textSize = 11f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
+        val source = textView("nafha_source", 11f, Color.rgb(244, 199, 106), false)
+        val detailTitle = textView("nafha_detail_title", 11f, Color.rgb(169, 176, 181), true).apply {
             setPadding(0, dp(13), 0, dp(3))
         }
-        val detail = TextView(this).apply {
-            tag = "nafha_detail"
-            setTextColor(Color.WHITE)
-            textSize = 13f
-            setLineSpacing(0f, 1.18f)
-            gravity = Gravity.END
+        val detail = textView("nafha_detail", 13f, Color.WHITE, false).apply {
             textDirection = View.TEXT_DIRECTION_RTL
         }
-        val extraTitle = TextView(this).apply {
-            tag = "nafha_extra_title"
-            setTextColor(Color.rgb(169, 176, 181))
-            textSize = 11f
-            setTypeface(typeface, Typeface.BOLD)
-            gravity = Gravity.END
+        val extraTitle = textView("nafha_extra_title", 11f, Color.rgb(169, 176, 181), true).apply {
             setPadding(0, dp(11), 0, dp(3))
         }
-        val extra = TextView(this).apply {
-            tag = "nafha_extra"
-            setTextColor(Color.WHITE)
-            textSize = 12f
-            setLineSpacing(0f, 1.15f)
-            gravity = Gravity.END
+        val extra = textView("nafha_extra", 12f, Color.WHITE, false).apply {
             textDirection = View.TEXT_DIRECTION_RTL
         }
+
         val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END
@@ -472,15 +443,15 @@ class NafahatBubbleService : Service() {
                 selectNextItem()
                 markRead()
                 updateCard()
-                scheduleNextRotation()
+                scheduleNextNafha()
             }
         }
-        val close = Button(this).apply {
-            text = "×"
-            setOnClickListener { toggleCard() }
+        val dismiss = Button(this).apply {
+            text = "إخفاء"
+            setOnClickListener { dismissCurrentBubble() }
         }
         actions.addView(next)
-        actions.addView(close)
+        actions.addView(dismiss)
 
         container.addView(title)
         container.addView(body)
@@ -510,6 +481,22 @@ class NafahatBubbleService : Service() {
         card = container
         wm.addView(container, params)
         updateCard()
+    }
+
+    private fun textView(tagValue: String, size: Float, color: Int, bold: Boolean): TextView {
+        return TextView(this).apply {
+            tag = tagValue
+            setTextColor(color)
+            textSize = size
+            gravity = Gravity.END
+            setLineSpacing(0f, 1.2f)
+            if (bold) setTypeface(typeface, Typeface.BOLD)
+        }
+    }
+
+    private fun removeCard() {
+        card?.let { runCatching { wm.removeView(it) } }
+        card = null
     }
 
     private fun updateCard() {
@@ -543,11 +530,11 @@ class NafahatBubbleService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         startForeground(
-            notificationId,
-            NotificationCompat.Builder(this, channelId)
+            NOTIFICATION_ID,
+            NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle("منيب • نفحات")
-                .setContentText("النفحات العائمة مفعلة")
+                .setContentText("نفحات مفعلة حسب الجدول الذي اخترته")
                 .setOngoing(true)
                 .setContentIntent(pending)
                 .build(),
@@ -556,11 +543,16 @@ class NafahatBubbleService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(
-                NotificationChannel(channelId, "نفحات منيب", NotificationManager.IMPORTANCE_LOW),
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, "نفحات منيب", NotificationManager.IMPORTANCE_LOW),
             )
         }
+    }
+
+    private fun overlayType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+    } else {
+        @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
     }
 
     private fun screenWidth(): Int = resources.displayMetrics.widthPixels
