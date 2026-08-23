@@ -25,6 +25,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool isLogin = true;
   bool isLoading = false;
   bool obscurePassword = true;
+  bool awaitingVerification = false;
+  String verificationEmail = '';
 
   @override
   void dispose() {
@@ -64,17 +66,67 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (!mounted || user == null) return;
 
-      // Email verification is intentionally non-blocking. Firebase mail can be
-      // delayed or misconfigured; successful account creation/sign-in should
-      // still enter the app.
+      if (_auth.isPasswordUser(user) && !user.emailVerified) {
+        setState(() {
+          verificationEmail = user.email ?? email;
+          awaitingVerification = true;
+        });
+        return;
+      }
+
       await _finishAuth(user);
     } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_authError(e.code));
-    } catch (_) {
-      if (mounted) _showError(context.tr('authUnexpected'));
+      if (mounted) _showMessage(_authError(e.code));
+    } catch (e) {
+      if (mounted) _showMessage('${context.tr('authUnexpected')}\n$e');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  Future<void> _checkVerification() async {
+    if (isLoading) return;
+    setState(() => isLoading = true);
+    try {
+      final verified = await _auth.refreshEmailVerification();
+      if (!mounted) return;
+      if (!verified) {
+        _showMessage(context.tr('emailNotVerifiedYet'));
+        return;
+      }
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) await _finishAuth(user);
+    } on FirebaseAuthException catch (e) {
+      if (mounted) _showMessage(_authError(e.code));
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _resendVerification() async {
+    if (isLoading) return;
+    setState(() => isLoading = true);
+    try {
+      await _auth.resendVerification();
+      if (mounted) _showMessage(context.tr('verificationResent'));
+    } on FirebaseAuthException catch (e) {
+      if (mounted) _showMessage(_authError(e.code));
+    } catch (e) {
+      if (mounted) _showMessage('${context.tr('authUnexpected')}\n$e');
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _leaveVerification() async {
+    await _auth.signOut();
+    if (!mounted) return;
+    setState(() {
+      awaitingVerification = false;
+      isLogin = true;
+      _passwordController.clear();
+      _confirmController.clear();
+    });
   }
 
   Future<void> _signInWithGoogle() async {
@@ -85,7 +137,7 @@ class _AuthScreenState extends State<AuthScreen> {
       final user = await _auth.signInWithGoogle();
       if (!mounted) return;
       if (user == null) {
-        _showError(context.tr('googleCancelled'));
+        _showMessage(context.tr('googleCancelled'));
         return;
       }
       await _finishAuth(user);
@@ -93,18 +145,18 @@ class _AuthScreenState extends State<AuthScreen> {
       if (!mounted) return;
       final code = e.code.toLowerCase();
       if (code.contains('sign_in_failed') || code.contains('10')) {
-        _showError(
+        _showMessage(
           'Google Sign-In configuration error. Check the release SHA-1/SHA-256 in Firebase.',
         );
       } else if (code.contains('network')) {
-        _showError(context.tr('googleError'));
+        _showMessage(context.tr('googleError'));
       } else {
-        _showError('${context.tr('googleError')} (${e.code})');
+        _showMessage('${context.tr('googleError')} (${e.code})');
       }
     } on FirebaseAuthException catch (e) {
-      if (mounted) _showError(_authError(e.code));
+      if (mounted) _showMessage(_authError(e.code));
     } catch (e) {
-      if (mounted) _showError('${context.tr('googleError')}\n$e');
+      if (mounted) _showMessage('${context.tr('googleError')}\n$e');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -129,7 +181,7 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  void _showError(String message) {
+  void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
     );
@@ -149,6 +201,80 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+
+    if (awaitingVerification) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            onPressed: isLoading ? null : _leaveVerification,
+            icon: const Icon(Icons.arrow_back_rounded),
+          ),
+        ),
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(28),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 480),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 92,
+                      height: 92,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: Icon(
+                        Icons.mark_email_read_outlined,
+                        size: 46,
+                        color: scheme.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      context.tr('verifyEmailTitle'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      context
+                          .tr('verifyEmailBody')
+                          .replaceAll('{email}', verificationEmail),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 28),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: isLoading ? null : _checkVerification,
+                        icon: const Icon(Icons.verified_rounded),
+                        label: Text(context.tr('iveVerified')),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: isLoading ? null : _resendVerification,
+                        icon: const Icon(Icons.outgoing_mail),
+                        label: Text(context.tr('resendVerification')),
+                      ),
+                    ),
+                    if (isLoading) ...[
+                      const SizedBox(height: 20),
+                      const CircularProgressIndicator(),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: widget.returnOnSuccess ? AppBar() : null,
