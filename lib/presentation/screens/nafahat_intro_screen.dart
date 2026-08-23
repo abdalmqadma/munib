@@ -64,11 +64,7 @@ class NafahatIntroScreen extends StatelessWidget {
                         ),
                         border: Border.all(color: const Color(0xFFF4C76A), width: 3),
                         boxShadow: const [
-                          BoxShadow(
-                            blurRadius: 30,
-                            offset: Offset(0, 12),
-                            color: Color(0x33000000),
-                          ),
+                          BoxShadow(blurRadius: 30, offset: Offset(0, 12), color: Color(0x33000000)),
                         ],
                       ),
                       child: const Icon(
@@ -88,14 +84,11 @@ class NafahatIntroScreen extends StatelessWidget {
                 const SizedBox(height: 14),
                 Text(
                   t(
-                    'نفحات ليست فقاعة دائمة. أنت تختار كل كم تظهر وكم ثانية تبقى، ثم تختفي وحدها. افتحها لآية بتفسير مختصر وسبب نزول موثوق عندما يتوفر، أو حديث مع فائدته، أو ذكر مع فضله، أو أثر طيب.',
-                    'Nafahat is not a permanent bubble. You choose how often it appears and how many seconds it stays, then it disappears on its own. Open it for a verse with short tafsir and reliably sourced context when available, a hadith with benefit, an adhkar virtue, or a gentle reflection.',
+                    'نفحة قصيرة تظهر فوق التطبيقات في موعدك ثم تختفي. افتحها لآية بتفسير مختصر، حديث مع فائدته ومصدره، ذكر مع فضله أو أثر طيب. ويمكن لمنيب اختيار محتوى أنسب للصباح والمساء والجمعة وقرب الصلاة.',
+                    'A short reflection appears above other apps on your schedule, then disappears. Open it for a verse with short tafsir, hadith with benefit and source, adhkar with virtue, or a gentle reflection. Muneeb can also prioritize content for mornings, evenings, Friday and when prayer is near.',
                   ),
                   textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    height: 1.65,
-                  ),
+                  style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant, height: 1.65),
                 ),
                 const SizedBox(height: 28),
                 Container(
@@ -110,12 +103,17 @@ class NafahatIntroScreen extends StatelessWidget {
                     children: [
                       _Benefit(
                         icon: Icons.schedule_rounded,
-                        text: t('أنت تحدد وقت الظهور ومدة بقاء النفحة', 'You control when it appears and how long it stays'),
+                        text: t('أنت تحدد كل كم تظهر وكم ثانية تبقى', 'You choose how often it appears and how long it stays'),
                       ),
                       const SizedBox(height: 14),
                       _Benefit(
                         icon: Icons.swipe_rounded,
-                        text: t('تلتصق بأقرب حافة ويمكنك إخفاؤها فوراً', 'It snaps to the nearest edge and can be dismissed instantly'),
+                        text: t('تلتصق بأقرب حافة يمين أو شمال بعيداً عن أزرار النظام', 'It snaps to the nearest left or right edge away from system controls'),
+                      ),
+                      const SizedBox(height: 14),
+                      _Benefit(
+                        icon: Icons.delete_outline_rounded,
+                        text: t('اسحبها إلى دائرة × بالأسفل لإخفائها حتى الموعد القادم فقط', 'Drag it to the × target below to hide it only until the next scheduled reflection'),
                       ),
                       const SizedBox(height: 14),
                       _Benefit(
@@ -135,10 +133,7 @@ class NafahatIntroScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                TextButton(
-                  onPressed: () => _later(context),
-                  child: Text(t('لاحقاً', 'Later')),
-                ),
+                TextButton(onPressed: () => _later(context), child: Text(t('لاحقاً', 'Later'))),
               ],
             ),
           ),
