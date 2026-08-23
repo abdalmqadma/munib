@@ -70,11 +70,10 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
-                <TextView
+                <Chronometer
                     android:id="@+id/widget_time_left"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="00:51:01"
                     android:textColor="#FFFFFFFF"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -87,11 +86,12 @@
                     android:textSize="9sp" />
             </LinearLayout>
 
-            <TextView
+            <TextClock
                 android:id="@+id/widget_current_time"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="20:33"
+                android:format12Hour="h:mm a"
+                android:format24Hour="HH:mm"
                 android:textColor="#EFFFFFFF"
                 android:textSize="13sp"
                 android:textStyle="bold" />
