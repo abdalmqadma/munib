@@ -11,7 +11,6 @@ import 'firebase_options.dart';
 import 'core/app_colors.dart';
 import 'core/app_theme.dart';
 import 'presentation/providers/prayer_provider.dart';
-import 'presentation/providers/prayer_coach_provider.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
@@ -38,7 +37,6 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => PrayerProvider()),
-        ChangeNotifierProvider(create: (_) => PrayerCoachProvider()),
       ],
       child: const ImsakiahApp(),
     ),
@@ -74,18 +72,13 @@ class ImsakiahApp extends StatelessWidget {
       darkTheme: AppTheme.dark,
       themeMode: provider.themeMode,
       locale: provider.locale,
-      supportedLocales: const [
-        Locale('ar'),
-        Locale('en'),
-      ],
+      supportedLocales: const [Locale('ar'), Locale('en')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      localeResolutionCallback: (locale, supportedLocales) {
-        return provider.locale;
-      },
+      localeResolutionCallback: (locale, supportedLocales) => provider.locale,
       home: const SplashScreen(),
     );
   }
