@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/services/auth_service.dart';
 import 'home_screen.dart';
 import 'language_selection_screen.dart';
 import 'onboarding_screen.dart';
@@ -33,6 +34,11 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
+    // Munib supports guest mode. If an email/password user abandoned the
+    // verification flow, do not silently treat that Firebase session as a
+    // verified signed-in account after reopening the app.
+    await AuthService().signOutUnverifiedPasswordUser();
+
     final prefs = await SharedPreferences.getInstance();
     final isFirstRun = prefs.getBool('isFirstRun') ?? true;
     final lang = prefs.getString('language');
@@ -43,8 +49,6 @@ class _SplashScreenState extends State<SplashScreen>
     } else if (isFirstRun) {
       nextScreen = const OnboardingScreen();
     } else {
-      // Munib can be used as a guest. Authentication is required only for
-      // account-backed features such as Prayer Coach progress.
       nextScreen = const HomeScreen();
     }
 
