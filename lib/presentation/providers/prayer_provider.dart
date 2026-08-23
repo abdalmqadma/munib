@@ -14,6 +14,7 @@ class PrayerProvider with ChangeNotifier {
   String _nextPrayerName = "";
   Duration _timeLeft = Duration.zero;
   DateTime? _nextPrayerTime;
+  String? _lastWidgetStateKey;
   Timer? _timer;
 
   bool prayerNotif = true;
@@ -45,7 +46,8 @@ class PrayerProvider with ChangeNotifier {
   Future<void> _loadFromHive() async {
     final box = await Hive.openBox<PrayerDay>('prayers');
     _monthlyPrayers = box.values.toList();
-    _updateCurrentStatus();
+    await WidgetService.savePrayerSchedule(_monthlyPrayers);
+    _updateCurrentStatus(forceWidgetUpdate: true);
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
@@ -53,7 +55,8 @@ class PrayerProvider with ChangeNotifier {
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
     await box.addAll(prayers);
-    _updateCurrentStatus();
+    await WidgetService.savePrayerSchedule(_monthlyPrayers);
+    _updateCurrentStatus(forceWidgetUpdate: true);
     if (_currentDay != null && prayerNotif) {
       NotificationService.scheduleDailyPrayers(_currentDay!);
     }
@@ -94,6 +97,7 @@ class PrayerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use24HourFormat', value);
     use24HourFormat = value;
+    _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
 
@@ -144,11 +148,11 @@ class PrayerProvider with ChangeNotifier {
     });
   }
 
-  void _updateCurrentStatus() {
+  void _updateCurrentStatus({bool forceWidgetUpdate = false}) {
     final now = DateTime.now();
     if (_monthlyPrayers.isEmpty) return;
 
-    String todayStr = DateFormat('yyyy-MM-dd').format(now);
+    final todayStr = DateFormat('yyyy-MM-dd').format(now);
     _currentDay = _monthlyPrayers.firstWhere(
       (p) => p.date == todayStr,
       orElse: () => _monthlyPrayers.first,
@@ -157,12 +161,19 @@ class PrayerProvider with ChangeNotifier {
     _calculateNextPrayer(now);
     notifyListeners();
 
-    WidgetService.updateWidget(
-      currentTime: use24HourFormat ? DateFormat('HH:mm').format(now) : DateFormat('h:mm a', languageCode).format(now),
-      nextPrayer: _nextPrayerName,
-      timeLeft: timeLeftFormatted,
-      nextPrayerTime: _nextPrayerTime,
-    );
+    final widgetStateKey =
+        '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}';
+    if (forceWidgetUpdate || widgetStateKey != _lastWidgetStateKey) {
+      _lastWidgetStateKey = widgetStateKey;
+      WidgetService.updateWidget(
+        currentTime: use24HourFormat
+            ? DateFormat('HH:mm').format(now)
+            : DateFormat('h:mm a', languageCode).format(now),
+        nextPrayer: _nextPrayerName,
+        timeLeft: timeLeftFormatted,
+        nextPrayerTime: _nextPrayerTime,
+      );
+    }
   }
 
   void _calculateNextPrayer(DateTime now) {
@@ -194,7 +205,11 @@ class PrayerProvider with ChangeNotifier {
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
       try {
         final tomorrowData = _monthlyPrayers.firstWhere((p) => p.date == tomorrowStr);
-        final tomorrowFajr = _parseTime(tomorrowData.fajr, now.add(const Duration(days: 1)), 'Fajr');
+        final tomorrowFajr = _parseTime(
+          tomorrowData.fajr,
+          now.add(const Duration(days: 1)),
+          'Fajr',
+        );
         _nextPrayerTime = tomorrowFajr;
         _timeLeft = tomorrowFajr.difference(now);
       } catch (_) {
@@ -235,8 +250,8 @@ class PrayerProvider with ChangeNotifier {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, "0");
-    String twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    String twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
+    final twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
+    final twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
     return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
   }
 
