@@ -5,6 +5,7 @@ import '../../data/services/auth_service.dart';
 import 'home_screen.dart';
 import 'language_selection_screen.dart';
 import 'onboarding_screen.dart';
+import 'nafahat_intro_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,18 +14,14 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 1400),
-      vsync: this,
-    );
+    _controller = AnimationController(duration: const Duration(milliseconds: 1400), vsync: this);
     _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
     _navigateToNext();
@@ -33,29 +30,26 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _navigateToNext() async {
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
-
-    // Munib supports guest mode. If an email/password user abandoned the
-    // verification flow, do not silently treat that Firebase session as a
-    // verified signed-in account after reopening the app.
     await AuthService().signOutUnverifiedPasswordUser();
 
     final prefs = await SharedPreferences.getInstance();
     final isFirstRun = prefs.getBool('isFirstRun') ?? true;
     final lang = prefs.getString('language');
+    final sawNafahatIntro = prefs.getBool('nafahat_intro_v1_seen') ?? false;
 
     final Widget nextScreen;
     if (lang == null) {
       nextScreen = const LanguageSelectionScreen();
     } else if (isFirstRun) {
       nextScreen = const OnboardingScreen();
+    } else if (!sawNafahatIntro) {
+      nextScreen = const NafahatIntroScreen();
     } else {
       nextScreen = const HomeScreen();
     }
 
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => nextScreen),
-      );
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => nextScreen));
     }
   }
 
@@ -69,41 +63,21 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-
     return Scaffold(
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 110,
-                height: 110,
-                decoration: BoxDecoration(
-                  color: scheme.surface,
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: scheme.outline),
-                ),
-                child: Center(
-                  child: Icon(Icons.nightlight_round, color: scheme.primary, size: 45),
-                ),
-              ),
-              const SizedBox(height: 35),
-              Text(
-                'منيب',
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'M U N E E B',
-                style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 8),
-              ),
-            ],
-          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(
+              width: 110, height: 110,
+              decoration: BoxDecoration(color: scheme.surface, borderRadius: BorderRadius.circular(30), border: Border.all(color: scheme.outline)),
+              child: Center(child: Icon(Icons.nightlight_round, color: scheme.primary, size: 45)),
+            ),
+            const SizedBox(height: 35),
+            Text('منيب', style: theme.textTheme.displaySmall?.copyWith(fontSize: 56, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 4),
+            Text('M U N E E B', style: theme.textTheme.labelMedium?.copyWith(letterSpacing: 8)),
+          ]),
         ),
       ),
     );
