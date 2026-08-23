@@ -81,50 +81,49 @@ object PrayerWidgetScheduler {
         val isArabic = language.lowercase().startsWith("ar")
         val use24Hour = prefs.getBoolean("widget_use_24h", true)
         val localizedName = localizePrayer(next.name, isArabic)
+        val locale = if (isArabic) Locale("ar") else Locale.ENGLISH
+        val dateFormat = SimpleDateFormat("EEE d MMMM", locale)
+        val timePattern = if (use24Hour) "HH:mm" else "h:mm a"
+        val timeFormat = SimpleDateFormat(timePattern, locale)
+        val dhikr = minuteDhikr(now, isArabic)
+        val nextLabel = if (isArabic) "الصلاة التالية" else "Next prayer"
+        val remainingLabel = if (isArabic) "متبقي" else "remaining"
+
+        val nextLower = next.name.lowercase()
+        val bgRes = when (nextLower) {
+            "fajr", "sunrise" -> R.drawable.widget_bg_fajr
+            "dhuhr" -> R.drawable.widget_bg_dhuhr
+            "asr" -> R.drawable.widget_bg_asr
+            "maghrib" -> R.drawable.widget_bg_maghrib
+            else -> R.drawable.widget_bg_isha
+        }
+        val iconRes = when (nextLower) {
+            "fajr", "maghrib", "isha" -> R.drawable.ic_crescent
+            else -> R.drawable.ic_sun
+        }
 
         for (id in ids) {
             val views = RemoteViews(context.packageName, layoutRes)
             views.setViewVisibility(R.id.widget_active_layout, View.VISIBLE)
             views.setViewVisibility(R.id.widget_empty_layout, View.GONE)
+
+            views.setTextViewText(R.id.widget_next_label, nextLabel)
             views.setTextViewText(
                 R.id.widget_next_prayer,
                 if (isArabic) localizedName else localizedName.uppercase(),
             )
+            views.setTextViewText(R.id.widget_remaining_label, remainingLabel)
+            views.setTextViewText(R.id.widget_dhikr, dhikr)
+            views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
+            views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
+            views.setImageViewResource(R.id.widget_bg_icon, iconRes)
+            views.setInt(R.id.widget_root, "setBackgroundResource", bgRes)
 
             val remaining = (next.atMillis - now).coerceAtLeast(0L)
             val chronometerBase = SystemClock.elapsedRealtime() + remaining
             views.setChronometer(R.id.widget_time_left, chronometerBase, null, true)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 views.setChronometerCountDown(R.id.widget_time_left, true)
-            }
-
-            val nextLower = next.name.lowercase()
-            val bgRes = when (nextLower) {
-                "fajr", "sunrise" -> R.drawable.widget_bg_fajr
-                "dhuhr" -> R.drawable.widget_bg_dhuhr
-                "asr" -> R.drawable.widget_bg_asr
-                "maghrib" -> R.drawable.widget_bg_maghrib
-                else -> R.drawable.widget_bg_isha
-            }
-            views.setInt(R.id.widget_root, "setBackgroundResource", bgRes)
-
-            if (layoutRes == R.layout.widget_medium) {
-                val iconRes = when (nextLower) {
-                    "fajr", "maghrib", "isha" -> R.drawable.ic_crescent
-                    else -> R.drawable.ic_sun
-                }
-                views.setImageViewResource(R.id.widget_bg_icon, iconRes)
-
-                val dhikr = minuteDhikr(now, isArabic)
-                views.setTextViewText(R.id.widget_dhikr, dhikr)
-
-                val locale = if (isArabic) Locale("ar") else Locale.ENGLISH
-                val dateFormat = SimpleDateFormat("EEE d MMMM", locale)
-                views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
-
-                val timePattern = if (use24Hour) "HH:mm" else "h:mm a"
-                val timeFormat = SimpleDateFormat(timePattern, locale)
-                views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             }
 
             manager.updateAppWidget(id, views)
@@ -175,6 +174,11 @@ object PrayerWidgetScheduler {
         val prefs = HomeWidgetPlugin.getData(context)
         val language = prefs.getString("widget_language", "ar") ?: "ar"
         val isArabic = language.lowercase().startsWith("ar")
+        val message = if (isArabic) {
+            "افتح التطبيق مرة واحدة لتحميل المواقيت"
+        } else {
+            "Open Munib once to load prayer times"
+        }
         val providers = listOf(
             Pair(PrayerWidgetSmall::class.java, R.layout.widget_small),
             Pair(PrayerWidgetMedium::class.java, R.layout.widget_medium),
@@ -186,13 +190,7 @@ object PrayerWidgetScheduler {
                 val views = RemoteViews(context.packageName, layout)
                 views.setViewVisibility(R.id.widget_active_layout, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_layout, View.VISIBLE)
-                if (layout == R.layout.widget_medium) {
-                    views.setTextViewText(
-                        R.id.widget_empty_message,
-                        if (isArabic) "افتح التطبيق مرة واحدة لتحميل المواقيت"
-                        else "Open Munib once to load prayer times",
-                    )
-                }
+                views.setTextViewText(R.id.widget_empty_message, message)
                 manager.updateAppWidget(id, views)
             }
         }
