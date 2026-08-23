@@ -43,6 +43,18 @@ class WidgetService {
     }
   }
 
+  static Future<void> savePreferences({
+    required String languageCode,
+    required bool use24HourFormat,
+  }) async {
+    try {
+      await HomeWidget.saveWidgetData<String>('widget_language', languageCode);
+      await HomeWidget.saveWidgetData<bool>('widget_use_24h', use24HourFormat);
+    } catch (e) {
+      debugPrint('Error saving widget preferences: $e');
+    }
+  }
+
   static DateTime? _parsePrayerTime(
     DateTime date,
     String raw,
@@ -71,11 +83,15 @@ class WidgetService {
     required String nextPrayer,
     required String timeLeft,
     required DateTime? nextPrayerTime,
+    required String languageCode,
+    required bool use24HourFormat,
   }) async {
     try {
       await HomeWidget.saveWidgetData<String>('current_time', currentTime);
       await HomeWidget.saveWidgetData<String>('next_prayer', nextPrayer);
       await HomeWidget.saveWidgetData<String>('time_left', timeLeft);
+      await HomeWidget.saveWidgetData<String>('widget_language', languageCode);
+      await HomeWidget.saveWidgetData<bool>('widget_use_24h', use24HourFormat);
       await HomeWidget.saveWidgetData<int>(
         'next_prayer_epoch_ms',
         nextPrayerTime?.millisecondsSinceEpoch ?? 0,
