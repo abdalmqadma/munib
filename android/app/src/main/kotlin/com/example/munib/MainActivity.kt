@@ -10,6 +10,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.example.munib/nafahat"
+    private val prefsName = "nafahat_prefs"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,6 +44,42 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "isNafahatRunning" -> result.success(NafahatBubbleService.isRunning)
+                    "getNafahatSettings" -> {
+                        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+                        result.success(
+                            mapOf(
+                                "enabledKinds" to (prefs.getStringSet("enabled_kinds", null)
+                                    ?: setOf("آية", "حديث", "ذكر", "أثر طيب")).toList(),
+                                "intervalMinutes" to prefs.getInt("interval_minutes", 30),
+                                "quietMode" to prefs.getBoolean("quiet_mode", false),
+                            ),
+                        )
+                    }
+                    "setNafahatSettings" -> {
+                        val kinds = call.argument<List<String>>("enabledKinds")
+                            ?.filter { it in setOf("آية", "حديث", "ذكر", "أثر طيب") }
+                            ?.toSet()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
+                        val interval = (call.argument<Int>("intervalMinutes") ?: 30).coerceIn(10, 180)
+                        val quiet = call.argument<Boolean>("quietMode") ?: false
+
+                        getSharedPreferences(prefsName, MODE_PRIVATE)
+                            .edit()
+                            .putStringSet("enabled_kinds", kinds)
+                            .putInt("interval_minutes", interval)
+                            .putBoolean("quiet_mode", quiet)
+                            .apply()
+
+                        if (NafahatBubbleService.isRunning) {
+                            val refresh = Intent(this, NafahatBubbleService::class.java).apply {
+                                action = NafahatBubbleService.ACTION_REFRESH_SETTINGS
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(refresh)
+                            else startService(refresh)
+                        }
+                        result.success(true)
+                    }
                     else -> result.notImplemented()
                 }
             }
