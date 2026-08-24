@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -24,7 +23,6 @@ void main() async {
 
   await initializeDateFormatting('ar', null);
   await initializeDateFormatting('en', null);
-  await dotenv.load(fileName: '.env');
   await Hive.initFlutter();
 
   if (!Hive.isAdapterRegistered(0)) {
