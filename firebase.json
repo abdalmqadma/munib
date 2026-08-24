@@ -1,1 +1,28 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"munib-f5102","appId":"1:372276574383:android:6ea6f89d718cd3b127fc5a","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"munib-f5102","configurations":{"android":"1:372276574383:android:6ea6f89d718cd3b127fc5a","ios":"1:372276574383:ios:dd73d359738e7e1f27fc5a"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "munib-f5102",
+          "appId": "1:372276574383:android:6ea6f89d718cd3b127fc5a",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "munib-f5102",
+          "configurations": {
+            "android": "1:372276574383:android:6ea6f89d718cd3b127fc5a",
+            "ios": "1:372276574383:ios:dd73d359738e7e1f27fc5a"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}
