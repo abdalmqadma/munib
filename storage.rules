@@ -1,0 +1,24 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Profile photos are private-to-write and public-to-read through the
+    // download URL only if Firebase Storage permits it. Uploads are limited
+    // to the authenticated user's own JPEG/PNG image and a small file size.
+    match /profile_photos/{fileName} {
+      allow read: if signedIn();
+      allow write: if signedIn()
+                   && fileName.matches(request.auth.uid + '\\.(jpg|jpeg|png)')
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/(jpeg|png)');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
