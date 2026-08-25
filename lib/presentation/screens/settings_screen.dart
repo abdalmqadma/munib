@@ -48,7 +48,10 @@ class SettingsScreen extends StatelessWidget {
                         title: context.tr('location'),
                         subtitle: provider.currentCity,
                         icon: Icons.location_city,
-                        onTap: () {},
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ImsakiaSettingsScreen()),
+                        ),
                       ),
                     ]),
                     const SizedBox(height: 24),
