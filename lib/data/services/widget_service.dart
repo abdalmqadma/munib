@@ -2,11 +2,15 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../models/prayer_day.dart';
 
 class WidgetService {
-  static Future<void> savePrayerSchedule(List<PrayerDay> days) async {
+  static Future<void> savePrayerSchedule(
+    List<PrayerDay> days, {
+    String timezone = '',
+  }) async {
     try {
       final points = <Map<String, dynamic>>[];
 
@@ -24,7 +28,12 @@ class WidgetService {
         };
 
         for (final entry in prayers.entries) {
-          final at = _parsePrayerTime(date, entry.value, entry.key);
+          final at = _parsePrayerTime(
+            date,
+            entry.value,
+            entry.key,
+            timezone: timezone,
+          );
           if (at == null) continue;
           points.add({
             'name': entry.key,
@@ -38,6 +47,7 @@ class WidgetService {
         'prayer_schedule_json',
         jsonEncode(points),
       );
+      await HomeWidget.saveWidgetData<String>('widget_timezone', timezone);
     } catch (e) {
       debugPrint('Error saving widget prayer schedule: $e');
     }
@@ -58,8 +68,9 @@ class WidgetService {
   static DateTime? _parsePrayerTime(
     DateTime date,
     String raw,
-    String prayerName,
-  ) {
+    String prayerName, {
+    required String timezone,
+  }) {
     final match = RegExp(r'^(\d{1,2}):(\d{2})$').firstMatch(raw.trim());
     if (match == null) return null;
 
@@ -74,6 +85,20 @@ class WidgetService {
       hour += 12;
     }
     if (hour > 23) return null;
+
+    if (timezone.trim().isNotEmpty) {
+      try {
+        final location = tz.getLocation(timezone);
+        return tz.TZDateTime(
+          location,
+          date.year,
+          date.month,
+          date.day,
+          hour,
+          minute,
+        );
+      } catch (_) {}
+    }
 
     return DateTime(date.year, date.month, date.day, hour, minute);
   }
