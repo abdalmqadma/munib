@@ -3,10 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_strings.dart';
 import '../providers/prayer_provider.dart';
+import 'location_imsakia_screen.dart';
 import 'upload_screen.dart';
 
 class ImsakiaSettingsScreen extends StatelessWidget {
   const ImsakiaSettingsScreen({super.key});
+
+  bool _isArabic(BuildContext context) =>
+      Localizations.localeOf(context).languageCode == 'ar';
+
+  String _t(BuildContext context, String ar, String en) =>
+      _isArabic(context) ? ar : en;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +75,81 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _t(context, 'مواقع الإمساكية', 'Imsakia locations'),
+            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _t(
+              context,
+              'احتفظ بأكثر من مدينة وانتقل بينها بدون حذف الإمساكية السابقة.',
+              'Keep multiple cities and switch between them without replacing the previous Imsakia.',
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          if (provider.savedLocations.isNotEmpty)
+            ...provider.savedLocations.map((location) {
+              final active = provider.activeLocationId == location.id;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: active
+                        ? scheme.primary.withValues(alpha: .10)
+                        : scheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: active ? scheme.primary : scheme.outline,
+                      width: active ? 1.4 : 1,
+                    ),
+                  ),
+                  child: ListTile(
+                    onTap: active
+                        ? null
+                        : () => provider.activateSavedLocation(location.id),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    leading: Icon(
+                      active ? Icons.radio_button_checked_rounded : Icons.location_on_outlined,
+                      color: active ? scheme.primary : scheme.onSurfaceVariant,
+                    ),
+                    title: Text(
+                      location.label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      active
+                          ? _t(context, 'الإمساكية النشطة', 'Active Imsakia')
+                          : (location.timezone.isEmpty
+                              ? _t(context, 'اضغط للتفعيل', 'Tap to activate')
+                              : location.timezone),
+                    ),
+                    trailing: provider.savedLocations.length > 1
+                        ? IconButton(
+                            tooltip: _t(context, 'حذف الموقع', 'Remove location'),
+                            onPressed: () => provider.removeSavedLocation(location.id),
+                            icon: const Icon(Icons.delete_outline_rounded),
+                          )
+                        : null,
+                  ),
+                ),
+              );
+            }),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LocationImsakiaScreen()),
+              ),
+              icon: const Icon(Icons.add_location_alt_outlined),
+              label: Text(_t(context, 'إضافة موقع من أي مكان في العالم', 'Add a location anywhere in the world')),
             ),
           ),
           const SizedBox(height: 20),
