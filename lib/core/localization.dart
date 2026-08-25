@@ -23,7 +23,7 @@ class AppLocalization {
       'google_sign_in': 'الدخول بواسطة جوجل',
     },
     'en': {
-      'app_title': 'Muneeb',
+      'app_title': 'Munib',
       'next_prayer': 'Next Prayer',
       'remaining': 'Remaining',
       'fajr': 'Fajr',
