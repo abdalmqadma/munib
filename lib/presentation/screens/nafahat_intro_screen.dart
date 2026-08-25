@@ -77,7 +77,7 @@ class NafahatIntroScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 34),
                 Text(
-                  t('جديد في منيب — نفحات', 'New in Muneeb — Nafahat'),
+                  t('جديد في منيب — نفحات', 'New in Munib — Nafahat'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
                 ),
@@ -85,7 +85,7 @@ class NafahatIntroScreen extends StatelessWidget {
                 Text(
                   t(
                     'نفحة قصيرة تظهر فوق التطبيقات في موعدك ثم تختفي. افتحها لآية بتفسير مختصر، حديث مع فائدته ومصدره، ذكر مع فضله أو أثر طيب. ويمكن لمنيب اختيار محتوى أنسب للصباح والمساء والجمعة وقرب الصلاة.',
-                    'A short reflection appears above other apps on your schedule, then disappears. Open it for a verse with short tafsir, hadith with benefit and source, adhkar with virtue, or a gentle reflection. Muneeb can also prioritize content for mornings, evenings, Friday and when prayer is near.',
+                    'A short reflection appears above other apps on your schedule, then disappears. Open it for a verse with short tafsir, hadith with benefit and source, adhkar with virtue, or a gentle reflection. Munib can also prioritize content for mornings, evenings, Friday and when prayer is near.',
                   ),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant, height: 1.65),
