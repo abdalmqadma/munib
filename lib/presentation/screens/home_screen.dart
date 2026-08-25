@@ -103,12 +103,23 @@ class _HomeContentState extends State<HomeContent> {
     try {
       final location = await LocationService().getCurrentLocation(requestPermission: true);
       if (mounted) setState(() => _locationName = location.city);
-      final data = await AIService().fetchPrayerTimesByCoordinates(
+      final result = await AIService().fetchPrayerTimesForLocation(
         location.latitude,
         location.longitude,
       );
-      if (data.isEmpty) throw Exception('empty_prayer_response');
-      await provider.setMonthlyPrayers(data.map(PrayerDay.fromJson).toList());
+      if (result.days.isEmpty) throw Exception('empty_prayer_response');
+
+      final parts = location.city.split(',');
+      final city = parts.isNotEmpty ? parts.first.trim() : location.city;
+      final country = parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
+      await provider.addLocationImsakia(
+        name: city,
+        country: country,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        timezone: result.timezone,
+        prayers: result.days.map(PrayerDay.fromJson).toList(),
+      );
     } catch (e) {
       if (!mounted) return;
       final message = e.toString().contains('denied_forever')
@@ -262,14 +273,23 @@ class _NextPrayerSummary extends StatelessWidget {
   }
 }
 
-class _PrayerTimesSection extends StatelessWidget {
+class _PrayerTimesSection extends StatefulWidget {
   final PrayerProvider provider;
   const _PrayerTimesSection({required this.provider});
 
   @override
+  State<_PrayerTimesSection> createState() => _PrayerTimesSectionState();
+}
+
+class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
+  String? _expandedPrayer;
+
+  @override
   Widget build(BuildContext context) {
+    final provider = widget.provider;
     final day = provider.currentDay;
     if (day == null) return const SizedBox.shrink();
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final rows = [
       ('fajr', day.fajr, Icons.bedtime_outlined, 'Fajr'),
       ('sunrise', day.sunrise, Icons.wb_twilight_outlined, 'Sunrise'),
@@ -283,17 +303,24 @@ class _PrayerTimesSection extends StatelessWidget {
       children: [
         Text(context.tr('todayPrayerTimes'), style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 14),
-        ...rows.map(
-          (row) => Padding(
+        ...rows.map((row) {
+          final expanded = _expandedPrayer == row.$4;
+          return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: PrayerGridItem(
               name: context.tr(row.$1),
               time: provider.formatPrayerTime(row.$2),
               icon: row.$3,
               isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase(),
+              isExpanded: expanded,
+              countdown: expanded ? provider.formattedTimeUntilPrayer(row.$4) : null,
+              countdownLabel: isArabic ? 'متبقي حتى ${context.tr(row.$1)}' : 'Until ${context.tr(row.$1)}',
+              onTap: () => setState(() {
+                _expandedPrayer = expanded ? null : row.$4;
+              }),
             ),
-          ),
-        ),
+          );
+        }),
       ],
     );
   }
