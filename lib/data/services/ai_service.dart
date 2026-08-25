@@ -17,6 +17,16 @@ class ImsakiaExtractionResult {
   });
 }
 
+class LocationPrayerTimesResult {
+  final List<Map<String, dynamic>> days;
+  final String timezone;
+
+  const LocationPrayerTimesResult({
+    required this.days,
+    required this.timezone,
+  });
+}
+
 class AIService {
   static const String _imsakiaApiBaseUrl = 'https://munib-ocr-api.dockhosting.dev';
 
@@ -96,7 +106,7 @@ class AIService {
   }
 
   /// Free, deterministic location-based prayer times. No private key is needed.
-  Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(
+  Future<LocationPrayerTimesResult> fetchPrayerTimesForLocation(
     double latitude,
     double longitude, {
     DateTime? month,
@@ -128,14 +138,17 @@ class AIService {
       return match?.group(0)?.padLeft(5, '0') ?? '';
     }
 
+    String timezone = '';
     final result = <Map<String, dynamic>>[];
     for (final raw in body['data'] as List) {
       if (raw is! Map) continue;
       final item = Map<String, dynamic>.from(raw);
       final timings = Map<String, dynamic>.from(item['timings'] as Map? ?? {});
-      final gregorian = Map<String, dynamic>.from(
-        (item['date'] as Map?)?['gregorian'] as Map? ?? {},
-      );
+      final dateMap = Map<String, dynamic>.from(item['date'] as Map? ?? {});
+      final gregorian = Map<String, dynamic>.from(dateMap['gregorian'] as Map? ?? {});
+      final meta = Map<String, dynamic>.from(item['meta'] as Map? ?? {});
+      if (timezone.isEmpty) timezone = (meta['timezone'] ?? '').toString().trim();
+
       final date = (gregorian['date'] ?? '').toString();
       final parts = date.split('-');
       final isoDate = parts.length == 3 ? '${parts[2]}-${parts[1]}-${parts[0]}' : '';
@@ -150,7 +163,24 @@ class AIService {
         'isha': cleanTime(timings['Isha']),
       });
     }
-    return result.where((e) => (e['date'] as String).isNotEmpty).toList();
+
+    return LocationPrayerTimesResult(
+      days: result.where((e) => (e['date'] as String).isNotEmpty).toList(),
+      timezone: timezone,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(
+    double latitude,
+    double longitude, {
+    DateTime? month,
+  }) async {
+    return (await fetchPrayerTimesForLocation(
+      latitude,
+      longitude,
+      month: month,
+    ))
+        .days;
   }
 
   Future<List<Map<String, dynamic>>> fetchPrayerTimesByLocation(String city) async => [];
