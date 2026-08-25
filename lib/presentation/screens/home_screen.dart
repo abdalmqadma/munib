@@ -96,6 +96,36 @@ class _HomeContentState extends State<HomeContent> {
   bool _isAutoFetching = false;
   String? _locationName;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncKnownLocation());
+  }
+
+  Future<void> _syncKnownLocation() async {
+    if (!mounted) return;
+    final provider = context.read<PrayerProvider>();
+
+    // A manually selected/saved Imsakia location is authoritative. Only fill
+    // the header from the device location when no schedule location is active.
+    if (provider.activeLocationId != null ||
+        (provider.currentCity.trim().isNotEmpty && provider.currentCity != 'غير محدد')) {
+      return;
+    }
+
+    final locationService = LocationService();
+    if (!await locationService.hasGrantedPermission()) return;
+
+    try {
+      final location = await locationService.getCurrentLocation(requestPermission: false);
+      if (!mounted) return;
+      setState(() => _locationName = location.city);
+      await provider.updateSetting('currentCity', location.city);
+    } catch (_) {
+      // Do not interrupt Home if reverse geocoding/GPS is temporarily unavailable.
+    }
+  }
+
   Future<void> _fetchByLocation() async {
     if (_isAutoFetching) return;
     setState(() => _isAutoFetching = true);
