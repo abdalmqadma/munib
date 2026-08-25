@@ -134,7 +134,7 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'M U N E E B',
+                    'M U N I B',
                     style: theme.textTheme.labelMedium?.copyWith(
                       letterSpacing: 7,
                       color: scheme.onSurfaceVariant,
