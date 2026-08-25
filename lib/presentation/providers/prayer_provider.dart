@@ -1,28 +1,85 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../data/models/prayer_day.dart';
+import 'dart:convert';
 
-import '../../data/services/widget_service.dart';
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:timezone/timezone.dart' as tz;
+
+import '../../data/models/prayer_day.dart';
 import '../../data/services/notification_service.dart';
+import '../../data/services/widget_service.dart';
+
+class SavedImsakiaLocation {
+  final String id;
+  final String name;
+  final String country;
+  final double latitude;
+  final double longitude;
+  final String timezone;
+  final List<PrayerDay> prayers;
+
+  const SavedImsakiaLocation({
+    required this.id,
+    required this.name,
+    required this.country,
+    required this.latitude,
+    required this.longitude,
+    required this.timezone,
+    required this.prayers,
+  });
+
+  String get label => country.trim().isEmpty ? name : '$name, $country';
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'country': country,
+        'latitude': latitude,
+        'longitude': longitude,
+        'timezone': timezone,
+        'prayers': prayers.map((e) => e.toJson()).toList(),
+      };
+
+  factory SavedImsakiaLocation.fromJson(Map<String, dynamic> json) {
+    final rawPrayers = json['prayers'] is List ? json['prayers'] as List : const [];
+    return SavedImsakiaLocation(
+      id: (json['id'] ?? '').toString(),
+      name: (json['name'] ?? '').toString(),
+      country: (json['country'] ?? '').toString(),
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
+      timezone: (json['timezone'] ?? '').toString(),
+      prayers: rawPrayers
+          .whereType<Map>()
+          .map((e) => PrayerDay.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+    );
+  }
+}
 
 class PrayerProvider with ChangeNotifier {
+  static const _savedLocationsKey = 'savedImsakiaLocationsV1';
+  static const _activeLocationKey = 'activeImsakiaLocationId';
+
   List<PrayerDay> _monthlyPrayers = [];
   PrayerDay? _currentDay;
-  String _nextPrayerName = "";
+  String _nextPrayerName = '';
   Duration _timeLeft = Duration.zero;
   DateTime? _nextPrayerTime;
   String? _lastWidgetStateKey;
   Timer? _timer;
+  List<SavedImsakiaLocation> _savedLocations = [];
+  String? _activeLocationId;
+  String _activeTimezone = '';
 
   bool prayerNotif = true;
   bool reminderNotif = true;
   bool azkarNotif = false;
   bool silentMode = false;
   String adhanVoice = 'Meccan';
-  String currentCity = "غير محدد";
+  String currentCity = 'غير محدد';
   String language = 'العربية';
   bool isDarkMode = true;
   bool use24HourFormat = true;
@@ -31,6 +88,9 @@ class PrayerProvider with ChangeNotifier {
   PrayerDay? get currentDay => _currentDay;
   String get nextPrayerName => _nextPrayerName;
   String get timeLeftFormatted => _formatDuration(_timeLeft);
+  List<SavedImsakiaLocation> get savedLocations => List.unmodifiable(_savedLocations);
+  String? get activeLocationId => _activeLocationId;
+  String get activeTimezone => _activeTimezone;
 
   String get languageCode => language == 'English' ? 'en' : 'ar';
   Locale get locale => Locale(languageCode);
@@ -51,6 +111,10 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
+    await _applyPrayers(prayers);
+  }
+
+  Future<void> _applyPrayers(List<PrayerDay> prayers) async {
     _monthlyPrayers = prayers;
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
@@ -63,6 +127,105 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> addLocationImsakia({
+    required String name,
+    required String country,
+    required double latitude,
+    required double longitude,
+    required String timezone,
+    required List<PrayerDay> prayers,
+  }) async {
+    if (_monthlyPrayers.isNotEmpty && _savedLocations.isEmpty) {
+      await _snapshotCurrentImsakiaIfNeeded();
+    }
+
+    final id = '${latitude.toStringAsFixed(5)}:${longitude.toStringAsFixed(5)}';
+    final item = SavedImsakiaLocation(
+      id: id,
+      name: name.trim().isEmpty ? country : name.trim(),
+      country: country.trim(),
+      latitude: latitude,
+      longitude: longitude,
+      timezone: timezone,
+      prayers: prayers,
+    );
+
+    final index = _savedLocations.indexWhere((e) => e.id == id);
+    if (index >= 0) {
+      _savedLocations[index] = item;
+    } else {
+      _savedLocations.add(item);
+    }
+
+    await _activateLocation(item, persistLocations: true);
+  }
+
+  Future<void> _snapshotCurrentImsakiaIfNeeded() async {
+    if (_monthlyPrayers.isEmpty) return;
+    final id = 'legacy-current';
+    if (_savedLocations.any((e) => e.id == id)) return;
+    final fallbackName = currentCity.trim().isEmpty || currentCity == 'غير محدد'
+        ? (isEnglish ? 'Current Imsakia' : 'الإمساكية الحالية')
+        : currentCity;
+    _savedLocations.add(SavedImsakiaLocation(
+      id: id,
+      name: fallbackName,
+      country: '',
+      latitude: 0,
+      longitude: 0,
+      timezone: _activeTimezone,
+      prayers: List<PrayerDay>.from(_monthlyPrayers),
+    ));
+    _activeLocationId ??= id;
+    await _persistSavedLocations();
+  }
+
+  Future<void> activateSavedLocation(String id) async {
+    final item = _savedLocations.where((e) => e.id == id).firstOrNull;
+    if (item == null) return;
+    await _activateLocation(item, persistLocations: false);
+  }
+
+  Future<void> _activateLocation(
+    SavedImsakiaLocation item, {
+    required bool persistLocations,
+  }) async {
+    _activeLocationId = item.id;
+    _activeTimezone = item.timezone;
+    currentCity = item.label;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('currentCity', currentCity);
+    await prefs.setString(_activeLocationKey, item.id);
+    if (persistLocations) await _persistSavedLocations();
+    await _applyPrayers(item.prayers);
+  }
+
+  Future<void> removeSavedLocation(String id) async {
+    final wasActive = _activeLocationId == id;
+    _savedLocations.removeWhere((e) => e.id == id);
+    if (wasActive) {
+      if (_savedLocations.isNotEmpty) {
+        await _activateLocation(_savedLocations.first, persistLocations: false);
+      } else {
+        _activeLocationId = null;
+        _activeTimezone = '';
+      }
+    }
+    await _persistSavedLocations();
+    notifyListeners();
+  }
+
+  Future<void> _persistSavedLocations() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _savedLocationsKey,
+      jsonEncode(_savedLocations.map((e) => e.toJson()).toList()),
+    );
+    if (_activeLocationId != null) {
+      await prefs.setString(_activeLocationKey, _activeLocationId!);
+    }
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     prayerNotif = prefs.getBool('prayerNotif') ?? true;
@@ -70,11 +233,36 @@ class PrayerProvider with ChangeNotifier {
     azkarNotif = prefs.getBool('azkarNotif') ?? false;
     silentMode = prefs.getBool('silentMode') ?? false;
     adhanVoice = prefs.getString('adhanVoice') ?? 'Meccan';
-    currentCity = prefs.getString('currentCity') ?? "غير محدد";
+    currentCity = prefs.getString('currentCity') ?? 'غير محدد';
     final savedLanguage = prefs.getString('language') ?? 'ar';
     language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
+
+    final savedJson = prefs.getString(_savedLocationsKey);
+    if (savedJson != null && savedJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(savedJson);
+        if (decoded is List) {
+          _savedLocations = decoded
+              .whereType<Map>()
+              .map((e) => SavedImsakiaLocation.fromJson(Map<String, dynamic>.from(e)))
+              .where((e) => e.prayers.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {}
+    }
+    _activeLocationId = prefs.getString(_activeLocationKey);
+    if (_activeLocationId != null) {
+      final matches = _savedLocations.where((e) => e.id == _activeLocationId);
+      if (matches.isNotEmpty) {
+        final active = matches.first;
+        _activeTimezone = active.timezone;
+        currentCity = active.label;
+        await _applyPrayers(active.prayers);
+      }
+    }
+
     await WidgetService.savePreferences(
       languageCode: languageCode,
       use24HourFormat: use24HourFormat,
@@ -118,7 +306,6 @@ class PrayerProvider with ChangeNotifier {
   String formatPrayerTime(String rawTime) {
     final value = rawTime.trim();
     if (value.isEmpty || use24HourFormat) return value;
-
     try {
       final parsed = DateFormat('HH:mm').parseStrict(value);
       return DateFormat('h:mm a', languageCode).format(parsed);
@@ -156,14 +343,54 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  DateTime _nowForActiveLocation() {
+    if (_activeTimezone.trim().isNotEmpty) {
+      try {
+        return tz.TZDateTime.now(tz.getLocation(_activeTimezone));
+      } catch (_) {}
+    }
+    return DateTime.now();
+  }
+
+  Duration timeUntilPrayer(String prayerName) {
+    if (_monthlyPrayers.isEmpty) return Duration.zero;
+    final now = _nowForActiveLocation();
+    final todayStr = DateFormat('yyyy-MM-dd').format(now);
+    final today = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull ?? _currentDay;
+    if (today == null) return Duration.zero;
+
+    String rawFor(PrayerDay day) {
+      switch (prayerName.toLowerCase()) {
+        case 'fajr': return day.fajr;
+        case 'sunrise': return day.sunrise;
+        case 'dhuhr': return day.dhuhr;
+        case 'asr': return day.asr;
+        case 'maghrib': return day.maghrib;
+        case 'isha': return day.isha;
+        default: return '';
+      }
+    }
+
+    var target = _parseTime(rawFor(today), now, prayerName);
+    if (!target.isAfter(now)) {
+      final tomorrowReference = now.add(const Duration(days: 1));
+      final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
+      final tomorrow = _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
+      target = _parseTime(rawFor(tomorrow ?? today), tomorrowReference, prayerName);
+    }
+    return target.difference(now).isNegative ? Duration.zero : target.difference(now);
+  }
+
+  String formattedTimeUntilPrayer(String prayerName) => _formatDuration(timeUntilPrayer(prayerName));
+
   void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       _updateCurrentStatus();
     });
   }
 
   void _updateCurrentStatus({bool forceWidgetUpdate = false}) {
-    final now = DateTime.now();
+    final now = _nowForActiveLocation();
     if (_monthlyPrayers.isEmpty) return;
 
     final todayStr = DateFormat('yyyy-MM-dd').format(now);
@@ -175,8 +402,7 @@ class PrayerProvider with ChangeNotifier {
     _calculateNextPrayer(now);
     notifyListeners();
 
-    final widgetStateKey =
-        '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
+    final widgetStateKey = '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
     if (forceWidgetUpdate || widgetStateKey != _lastWidgetStateKey) {
       _lastWidgetStateKey = widgetStateKey;
       WidgetService.updateWidget(
@@ -194,7 +420,6 @@ class PrayerProvider with ChangeNotifier {
 
   void _calculateNextPrayer(DateTime now) {
     if (_currentDay == null) return;
-
     final prayers = {
       'Fajr': _currentDay!.fajr,
       'Sunrise': _currentDay!.sunrise,
@@ -205,9 +430,8 @@ class PrayerProvider with ChangeNotifier {
     };
 
     DateTime? nextTime;
-    String nextName = "";
-
-    for (var entry in prayers.entries) {
+    String nextName = '';
+    for (final entry in prayers.entries) {
       final prayerTime = _parseTime(entry.value, now, entry.key);
       if (prayerTime.isAfter(now)) {
         nextTime = prayerTime;
@@ -217,15 +441,12 @@ class PrayerProvider with ChangeNotifier {
     }
 
     if (nextTime == null) {
-      _nextPrayerName = "Fajr";
-      final tomorrowStr = DateFormat('yyyy-MM-dd').format(now.add(const Duration(days: 1)));
+      _nextPrayerName = 'Fajr';
+      final tomorrowReference = now.add(const Duration(days: 1));
+      final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
       try {
         final tomorrowData = _monthlyPrayers.firstWhere((p) => p.date == tomorrowStr);
-        final tomorrowFajr = _parseTime(
-          tomorrowData.fajr,
-          now.add(const Duration(days: 1)),
-          'Fajr',
-        );
+        final tomorrowFajr = _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
         _nextPrayerTime = tomorrowFajr;
         _timeLeft = tomorrowFajr.difference(now);
       } catch (_) {
@@ -241,17 +462,24 @@ class PrayerProvider with ChangeNotifier {
 
   DateTime _parseTime(String timeStr, DateTime referenceDate, String prayerName) {
     try {
-      final format = DateFormat("HH:mm");
-      final parsed = format.parse(timeStr.trim());
+      final parsed = DateFormat('HH:mm').parse(timeStr.trim());
       int hour = parsed.hour;
+      if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) hour += 12;
+      if (prayerName == 'Dhuhr' && hour < 10) hour += 12;
 
-      if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) {
-        hour += 12;
+      if (_activeTimezone.trim().isNotEmpty) {
+        try {
+          final location = tz.getLocation(_activeTimezone);
+          return tz.TZDateTime(
+            location,
+            referenceDate.year,
+            referenceDate.month,
+            referenceDate.day,
+            hour,
+            parsed.minute,
+          );
+        } catch (_) {}
       }
-      if (prayerName == 'Dhuhr' && hour < 10) {
-        hour += 12;
-      }
-
       return DateTime(
         referenceDate.year,
         referenceDate.month,
@@ -265,10 +493,11 @@ class PrayerProvider with ChangeNotifier {
   }
 
   String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, "0");
-    final twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    final twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    final safe = duration.isNegative ? Duration.zero : duration;
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(safe.inMinutes.remainder(60));
+    final seconds = twoDigits(safe.inSeconds.remainder(60));
+    return '${twoDigits(safe.inHours)}:$minutes:$seconds';
   }
 
   @override
