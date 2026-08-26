@@ -28,7 +28,7 @@ class LocationPrayerTimesResult {
 }
 
 class AIService {
-  static const String _imsakiaApiBaseUrl = 'https://munib-ocr-api.dockhosting.dev';
+  static const String _imsakiaApiBaseUrl = 'https://ocr.abd810166.workers.dev';
   static const Duration _imsakiaTimeout = Duration(seconds: 30);
 
   Future<ImsakiaExtractionResult> extractImsakiaFromImage(File imageFile) async {
