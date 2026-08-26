@@ -10,12 +10,48 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
-    // A user may only read or write their own profile document.
-    match /users/{userId} {
-      allow read, create, update, delete: if isOwner(userId);
+    function allowedProfileKeys() {
+      return [
+        'name',
+        'email',
+        'email_verified',
+        'photo_url',
+        'created_at',
+        'last_login',
+        'score'
+      ];
     }
 
-    // Deny everything else unless an explicit rule is added later.
+    function validIdentityFields() {
+      return (!('email' in request.resource.data) ||
+              request.resource.data.email == request.auth.token.email)
+          && (!('email_verified' in request.resource.data) ||
+              request.resource.data.email_verified == request.auth.token.email_verified);
+    }
+
+    function validCreate() {
+      return request.resource.data.keys().hasOnly(allowedProfileKeys())
+          && validIdentityFields()
+          && (!('score' in request.resource.data) || request.resource.data.score == 0)
+          && (!('name' in request.resource.data) || request.resource.data.name is string)
+          && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
+    }
+
+    function validUpdate() {
+      return request.resource.data.keys().hasOnly(allowedProfileKeys())
+          && validIdentityFields()
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['score', 'created_at']))
+          && (!('name' in request.resource.data) || request.resource.data.name is string)
+          && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && validCreate();
+      allow update: if isOwner(userId) && validUpdate();
+      allow delete: if isOwner(userId);
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
