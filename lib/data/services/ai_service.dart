@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class ImsakiaExtractionResult {
@@ -36,6 +37,15 @@ class AIService {
       Uri.parse('$_imsakiaApiBaseUrl/extract'),
     );
 
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final token = await user.getIdToken();
+      if (token != null && token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    request.headers['Accept'] = 'application/json';
     request.files.add(
       await http.MultipartFile.fromPath('file', imageFile.path),
     );
@@ -81,7 +91,7 @@ class AIService {
     final reviewRows = <Map<String, dynamic>>[];
     if (body['review_rows'] is List) {
       for (final raw in body['review_rows'] as List) {
-        if (raw is Map) reviewRows.add(Map<String, dynamic>.from(raw));
+        if (raw is Map) reviewRows.add(Map<String, dynamic>>.from(raw));
       }
     }
 
@@ -105,7 +115,6 @@ class AIService {
     return result.days;
   }
 
-  /// Free, deterministic location-based prayer times. No private key is needed.
   Future<LocationPrayerTimesResult> fetchPrayerTimesForLocation(
     double latitude,
     double longitude, {
@@ -185,7 +194,5 @@ class AIService {
 
   Future<List<Map<String, dynamic>>> fetchPrayerTimesByLocation(String city) async => [];
 
-  /// Legacy PDF/text route is intentionally disabled until it is moved behind
-  /// Muneeb's server. Private AI keys must never ship inside a mobile app.
   Future<List<Map<String, dynamic>>> structurePrayerTimes(String rawText) async => [];
 }
