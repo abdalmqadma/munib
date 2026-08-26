@@ -91,7 +91,7 @@ class AIService {
     final reviewRows = <Map<String, dynamic>>[];
     if (body['review_rows'] is List) {
       for (final raw in body['review_rows'] as List) {
-        if (raw is Map) reviewRows.add(Map<String, dynamic>>.from(raw));
+        if (raw is Map) reviewRows.add(Map<String, dynamic>.from(raw));
       }
     }
 
