@@ -6,6 +6,7 @@ class MunibPlaceSearchResult {
   final String displayName;
   final String city;
   final String country;
+  final String countryCode;
   final double latitude;
   final double longitude;
 
@@ -13,6 +14,7 @@ class MunibPlaceSearchResult {
     required this.displayName,
     required this.city,
     required this.country,
+    this.countryCode = '',
     required this.latitude,
     required this.longitude,
   });
@@ -76,6 +78,7 @@ class PlaceSearchService {
         'state',
       ]);
       final country = (address['country'] ?? '').toString().trim();
+      final countryCode = (address['country_code'] ?? '').toString().trim().toUpperCase();
       final display = (map['display_name'] ?? '').toString().trim();
       final label = [city, country].where((e) => e.isNotEmpty).join(', ');
       final key = '${lat.toStringAsFixed(4)},${lon.toStringAsFixed(4)}';
@@ -85,6 +88,7 @@ class PlaceSearchService {
         displayName: display.isNotEmpty ? display : label,
         city: city.isNotEmpty ? city : (label.isNotEmpty ? label : value),
         country: country,
+        countryCode: countryCode,
         latitude: lat,
         longitude: lon,
       ));

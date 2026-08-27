@@ -5,11 +5,13 @@ class MunibLocation {
   final double latitude;
   final double longitude;
   final String city;
+  final String countryCode;
 
   const MunibLocation({
     required this.latitude,
     required this.longitude,
     required this.city,
+    this.countryCode = '',
   });
 }
 
@@ -50,6 +52,7 @@ class LocationService {
     );
 
     String city = '${position.latitude.toStringAsFixed(3)}, ${position.longitude.toStringAsFixed(3)}';
+    String countryCode = '';
     try {
       final places = await placemarkFromCoordinates(position.latitude, position.longitude);
       if (places.isNotEmpty) {
@@ -58,6 +61,7 @@ class LocationService {
             ? place.locality!.trim()
             : (place.administrativeArea?.trim() ?? '');
         final country = place.country?.trim() ?? '';
+        countryCode = place.isoCountryCode?.trim().toUpperCase() ?? '';
         city = [locality, country].where((e) => e.isNotEmpty).join(', ');
       }
     } catch (_) {
@@ -68,6 +72,7 @@ class LocationService {
       latitude: position.latitude,
       longitude: position.longitude,
       city: city,
+      countryCode: countryCode,
     );
   }
 

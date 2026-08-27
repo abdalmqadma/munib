@@ -65,6 +65,7 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
       final result = await _aiService.fetchPrayerTimesForLocation(
         place.latitude,
         place.longitude,
+        countryCode: place.countryCode,
       );
       if (result.days.isEmpty) throw Exception('empty_times');
       final prayers = result.days.map(PrayerDay.fromJson).toList();

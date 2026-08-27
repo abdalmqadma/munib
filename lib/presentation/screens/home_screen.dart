@@ -136,6 +136,7 @@ class _HomeContentState extends State<HomeContent> {
       final result = await AIService().fetchPrayerTimesForLocation(
         location.latitude,
         location.longitude,
+        countryCode: location.countryCode,
       );
       if (result.days.isEmpty) throw Exception('empty_prayer_response');
 

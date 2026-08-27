@@ -84,7 +84,11 @@ class SettingsScreen extends StatelessWidget {
     messenger.showSnackBar(SnackBar(content: Text(t('جاري تحديد موقعك...', 'Detecting your location...'))));
     try {
       final location = await LocationService().getCurrentLocation(requestPermission: true);
-      final result = await AIService().fetchPrayerTimesForLocation(location.latitude, location.longitude);
+      final result = await AIService().fetchPrayerTimesForLocation(
+        location.latitude,
+        location.longitude,
+        countryCode: location.countryCode,
+      );
       if (result.days.isEmpty) throw Exception('empty');
       final parts = location.city.split(',');
       await provider.addLocationImsakia(name: parts.first.trim(), country: parts.length > 1 ? parts.sublist(1).join(',').trim() : '', latitude: location.latitude, longitude: location.longitude, timezone: result.timezone, prayers: result.days.map(PrayerDay.fromJson).toList());

@@ -27,6 +27,98 @@ class LocationPrayerTimesResult {
   const LocationPrayerTimesResult({required this.days, required this.timezone});
 }
 
+class PrayerCalculationProfile {
+  final int method;
+  final int school;
+  final String? tune;
+
+  const PrayerCalculationProfile({
+    required this.method,
+    this.school = 0,
+    this.tune,
+  });
+
+  /// Selects the calculation authority normally used in the detected country.
+  /// An uploaded official Imsakia still takes priority over calculated times.
+  static PrayerCalculationProfile forCountry(String? countryCode) {
+    switch ((countryCode ?? '').trim().toUpperCase()) {
+      // Palestine: Egyptian Survey angles with local Gaza timetable offsets.
+      // tune order: Imsak,Fajr,Sunrise,Dhuhr,Asr,Maghrib,Sunset,Isha,Midnight.
+      case 'PS':
+        return const PrayerCalculationProfile(
+          method: 5,
+          tune: '0,0,0,-1,-1,2,0,-1,0',
+        );
+      case 'EG':
+      case 'SD':
+        return const PrayerCalculationProfile(method: 5);
+      case 'SA':
+        return const PrayerCalculationProfile(method: 4);
+      case 'AE':
+        return const PrayerCalculationProfile(method: 16);
+      case 'KW':
+        return const PrayerCalculationProfile(method: 9);
+      case 'QA':
+        return const PrayerCalculationProfile(method: 10);
+      case 'BH':
+      case 'OM':
+      case 'YE':
+        return const PrayerCalculationProfile(method: 8);
+      case 'JO':
+        return const PrayerCalculationProfile(method: 23);
+      case 'TR':
+        return const PrayerCalculationProfile(method: 13);
+      case 'RU':
+        return const PrayerCalculationProfile(method: 14);
+      case 'PK':
+      case 'IN':
+      case 'BD':
+      case 'AF':
+        return const PrayerCalculationProfile(method: 1, school: 1);
+      case 'US':
+      case 'CA':
+        return const PrayerCalculationProfile(method: 2);
+      case 'MY':
+        return const PrayerCalculationProfile(method: 17);
+      case 'SG':
+        return const PrayerCalculationProfile(method: 11);
+      case 'ID':
+        return const PrayerCalculationProfile(method: 20);
+      case 'TN':
+        return const PrayerCalculationProfile(method: 18);
+      case 'DZ':
+        return const PrayerCalculationProfile(method: 19);
+      case 'MA':
+        return const PrayerCalculationProfile(method: 21);
+      case 'PT':
+        return const PrayerCalculationProfile(method: 22);
+      case 'FR':
+        return const PrayerCalculationProfile(method: 12);
+      default:
+        return const PrayerCalculationProfile(method: 3);
+    }
+  }
+
+  static PrayerCalculationProfile forLocation({
+    required double latitude,
+    required double longitude,
+    String? countryCode,
+  }) {
+    final code = (countryCode ?? '').trim().toUpperCase();
+    if (code.isNotEmpty) return forCountry(code);
+
+    // Reverse geocoding can be unavailable even while GPS and the prayer API
+    // work. Keep Gaza on its calibrated profile in that case as well.
+    final isGazaStrip = latitude >= 31.20 &&
+        latitude <= 31.65 &&
+        longitude >= 34.15 &&
+        longitude <= 34.65;
+    if (isGazaStrip) return forCountry('PS');
+
+    return forCountry(null);
+  }
+}
+
 class AIService {
   static const String _imsakiaApiBaseUrl = 'https://ocr.abd810166.workers.dev';
   static const Duration _imsakiaTimeout = Duration(seconds: 30);
@@ -129,13 +221,30 @@ class AIService {
 
   Future<List<Map<String, dynamic>>> structurePrayerTimesFromImage(File imageFile) async => (await extractImsakiaFromImage(imageFile)).days;
 
-  Future<LocationPrayerTimesResult> fetchPrayerTimesForLocation(double latitude, double longitude, {DateTime? month}) async {
+  Future<LocationPrayerTimesResult> fetchPrayerTimesForLocation(
+    double latitude,
+    double longitude, {
+    DateTime? month,
+    String? countryCode,
+  }) async {
     final target = month ?? DateTime.now();
-    final uri = Uri.https('api.aladhan.com', '/v1/calendar/${target.year}/${target.month}', {
+    final profile = PrayerCalculationProfile.forLocation(
+      latitude: latitude,
+      longitude: longitude,
+      countryCode: countryCode,
+    );
+    final query = <String, String>{
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
-      'method': '3',
-    });
+      'method': profile.method.toString(),
+      'school': profile.school.toString(),
+    };
+    if (profile.tune != null) query['tune'] = profile.tune!;
+    final uri = Uri.https(
+      'api.aladhan.com',
+      '/v1/calendar/${target.year}/${target.month}',
+      query,
+    );
     final response = await http.get(uri).timeout(const Duration(seconds: 20));
     if (response.statusCode != 200) throw HttpException('Prayer API returned ${response.statusCode}');
     final body = jsonDecode(response.body) as Map<String, dynamic>;
@@ -171,7 +280,19 @@ class AIService {
     return LocationPrayerTimesResult(days: result.where((e) => (e['date'] as String).isNotEmpty).toList(), timezone: timezone);
   }
 
-  Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(double latitude, double longitude, {DateTime? month}) async => (await fetchPrayerTimesForLocation(latitude, longitude, month: month)).days;
+  Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(
+    double latitude,
+    double longitude, {
+    DateTime? month,
+    String? countryCode,
+  }) async =>
+      (await fetchPrayerTimesForLocation(
+        latitude,
+        longitude,
+        month: month,
+        countryCode: countryCode,
+      ))
+          .days;
   Future<List<Map<String, dynamic>>> fetchPrayerTimesByLocation(String city) async => [];
   Future<List<Map<String, dynamic>>> structurePrayerTimes(String rawText) async => [];
 }
