@@ -99,6 +99,7 @@ object PrayerWidgetScheduler {
         val dhikr = minuteDhikr(now, isArabic)
         val nextLabel = if (isArabic) "الصلاة التالية" else "Next prayer"
         val remainingLabel = if (isArabic) "متبقي" else "remaining"
+        val openApp = launchPendingIntent(context)
 
         val nextLower = next.name.lowercase()
         val iconRes = when (nextLower) {
@@ -122,6 +123,7 @@ object PrayerWidgetScheduler {
             views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
             views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
+            views.setOnClickPendingIntent(R.id.widget_root, openApp)
 
             val remaining = (next.atMillis - now).coerceAtLeast(0L)
             val chronometerBase = SystemClock.elapsedRealtime() + remaining
@@ -188,6 +190,7 @@ object PrayerWidgetScheduler {
             Pair(PrayerWidgetMedium::class.java, R.layout.widget_medium),
             Pair(PrayerWidgetLarge::class.java, R.layout.widget_large),
         )
+        val openApp = launchPendingIntent(context)
         for ((provider, layout) in providers) {
             val ids = manager.getAppWidgetIds(ComponentName(context, provider))
             for (id in ids) {
@@ -196,9 +199,25 @@ object PrayerWidgetScheduler {
                 views.setViewVisibility(R.id.widget_active_layout, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_layout, View.VISIBLE)
                 views.setTextViewText(R.id.widget_empty_message, message)
+                views.setOnClickPendingIntent(R.id.widget_root, openApp)
                 manager.updateAppWidget(id, views)
             }
         }
+    }
+
+    private fun launchPendingIntent(context: Context): PendingIntent {
+        val intent = context.packageManager
+            .getLaunchIntentForPackage(context.packageName)
+            ?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            ?: Intent(context, MainActivity::class.java)
+        return PendingIntent.getActivity(
+            context,
+            4109,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
     }
 
     private fun scheduleNextTransition(context: Context, atMillis: Long) {

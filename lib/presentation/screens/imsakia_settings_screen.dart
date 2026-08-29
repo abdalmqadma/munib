@@ -86,61 +86,104 @@ class ImsakiaSettingsScreen extends StatelessWidget {
           Text(
             _t(
               context,
-              'احتفظ بأكثر من مدينة وانتقل بينها بدون حذف الإمساكية السابقة.',
-              'Keep multiple cities and switch between them without replacing the previous Imsakia.',
+              'اضغط على مدينة لتفعيلها، واسحب المقبض لتغيير أولوية ظهورها.',
+              'Tap a city to activate it, then drag the handle to change its display priority.',
             ),
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           if (provider.savedLocations.isNotEmpty)
-            ...provider.savedLocations.map((location) {
-              final active = provider.activeLocationId == location.id;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: active
-                        ? scheme.primary.withValues(alpha: .10)
-                        : scheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: active ? scheme.primary : scheme.outline,
-                      width: active ? 1.4 : 1,
-                    ),
-                  ),
-                  child: ListTile(
-                    onTap: active
-                        ? null
-                        : () => provider.activateSavedLocation(location.id),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    leading: Icon(
-                      active ? Icons.radio_button_checked_rounded : Icons.location_on_outlined,
-                      color: active ? scheme.primary : scheme.onSurfaceVariant,
-                    ),
-                    title: Text(
-                      location.label,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              itemCount: provider.savedLocations.length,
+              onReorder: provider.reorderSavedLocations,
+              itemBuilder: (context, index) {
+                final location = provider.savedLocations[index];
+                final active = provider.activeLocationId == location.id;
+                return Padding(
+                  key: ValueKey(location.id),
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: active
+                          ? scheme.primary.withValues(alpha: .10)
+                          : scheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: active ? scheme.primary : scheme.outline,
+                        width: active ? 1.4 : 1,
                       ),
                     ),
-                    subtitle: Text(
-                      active
-                          ? _t(context, 'الإمساكية النشطة', 'Active Imsakia')
-                          : (location.timezone.isEmpty
-                              ? _t(context, 'اضغط للتفعيل', 'Tap to activate')
-                              : location.timezone),
+                    child: ListTile(
+                      onTap: () => provider.activateSavedLocation(location.id),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      leading: Icon(
+                        active
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.location_on_outlined,
+                        color: active
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
+                      title: Text(
+                        location.label,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: active
+                              ? FontWeight.w800
+                              : FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        active
+                            ? _t(
+                                context,
+                                'الإمساكية النشطة • الأولوية ${index + 1}',
+                                'Active Imsakia • Priority ${index + 1}',
+                              )
+                            : _t(
+                                context,
+                                'اضغط للتفعيل • الأولوية ${index + 1}',
+                                'Tap to activate • Priority ${index + 1}',
+                              ),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (provider.savedLocations.length > 1)
+                            IconButton(
+                              tooltip: _t(
+                                context,
+                                'حذف الموقع',
+                                'Remove location',
+                              ),
+                              onPressed: () => provider.removeSavedLocation(
+                                location.id,
+                              ),
+                              icon: const Icon(Icons.delete_outline_rounded),
+                            ),
+                          if (provider.savedLocations.length > 1)
+                            ReorderableDragStartListener(
+                              index: index,
+                              child: Padding(
+                                padding: const EdgeInsets.all(10),
+                                child: Icon(
+                                  Icons.drag_handle_rounded,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    trailing: provider.savedLocations.length > 1
-                        ? IconButton(
-                            tooltip: _t(context, 'حذف الموقع', 'Remove location'),
-                            onPressed: () => provider.removeSavedLocation(location.id),
-                            icon: const Icon(Icons.delete_outline_rounded),
-                          )
-                        : null,
                   ),
-                ),
-              );
-            }),
+                );
+              },
+            ),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(

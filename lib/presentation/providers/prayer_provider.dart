@@ -106,7 +106,10 @@ class PrayerProvider with ChangeNotifier {
   Future<void> _loadFromHive() async {
     final box = await Hive.openBox<PrayerDay>('prayers');
     _monthlyPrayers = box.values.toList();
-    await WidgetService.savePrayerSchedule(_monthlyPrayers);
+    await WidgetService.savePrayerSchedule(
+      _monthlyPrayers,
+      timezone: _activeTimezone,
+    );
     _updateCurrentStatus(forceWidgetUpdate: true);
   }
 
@@ -119,7 +122,10 @@ class PrayerProvider with ChangeNotifier {
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
     await box.addAll(prayers);
-    await WidgetService.savePrayerSchedule(_monthlyPrayers);
+    await WidgetService.savePrayerSchedule(
+      _monthlyPrayers,
+      timezone: _activeTimezone,
+    );
     _updateCurrentStatus(forceWidgetUpdate: true);
     if (_currentDay != null && prayerNotif) {
       NotificationService.scheduleDailyPrayers(_currentDay!);
@@ -184,6 +190,18 @@ class PrayerProvider with ChangeNotifier {
     final item = _savedLocations.where((e) => e.id == id).firstOrNull;
     if (item == null) return;
     await _activateLocation(item, persistLocations: false);
+  }
+
+  Future<void> reorderSavedLocations(int oldIndex, int newIndex) async {
+    if (oldIndex < 0 || oldIndex >= _savedLocations.length) return;
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (newIndex < 0 || newIndex >= _savedLocations.length) return;
+    if (oldIndex == newIndex) return;
+
+    final item = _savedLocations.removeAt(oldIndex);
+    _savedLocations.insert(newIndex, item);
+    await _persistSavedLocations();
+    notifyListeners();
   }
 
   Future<void> _activateLocation(

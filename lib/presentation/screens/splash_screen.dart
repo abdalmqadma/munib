@@ -1,5 +1,3 @@
-import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -59,40 +57,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final isDark = theme.brightness == Brightness.dark;
-    final deviceArabic = ui.PlatformDispatcher.instance.locale.languageCode.toLowerCase() == 'ar';
-    final appName = deviceArabic ? 'منيب' : 'Munib';
-
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF07141F) : const Color(0xFFF7F4EE),
+      backgroundColor: const Color(0xFFF7F4EE),
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
           child: ScaleTransition(
             scale: _scaleAnimation,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 118,
-                  height: 118,
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0B1F3A) : Colors.white,
-                    borderRadius: BorderRadius.circular(32),
-                    border: Border.all(color: scheme.primary.withValues(alpha: .22)),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? .22 : .08), blurRadius: 28, offset: const Offset(0, 12))],
-                  ),
-                  child: Center(
-                    child: Icon(Icons.nightlight_round, size: 62, color: isDark ? const Color(0xFFF4C76A) : const Color(0xFF1E88E5)),
-                  ),
+            child: Semantics(
+              image: true,
+              label: 'Munib',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(42),
+                child: Image.asset(
+                  'assets/muneeb_icons/store/playstore_512.png',
+                  width: 190,
+                  height: 190,
+                  fit: BoxFit.cover,
                 ),
-                const SizedBox(height: 26),
-                Text(appName, textDirection: deviceArabic ? TextDirection.rtl : TextDirection.ltr, style: theme.textTheme.displaySmall?.copyWith(fontSize: 48, fontWeight: FontWeight.w900, color: scheme.onSurface)),
-                const SizedBox(height: 12),
-                Container(width: 44, height: 3, decoration: BoxDecoration(color: const Color(0xFFF4C76A), borderRadius: BorderRadius.circular(99))),
-              ],
+              ),
             ),
           ),
         ),

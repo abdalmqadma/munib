@@ -121,6 +121,10 @@ class WidgetService {
         'next_prayer_epoch_ms',
         nextPrayerTime?.millisecondsSinceEpoch ?? 0,
       );
+      await HomeWidget.saveWidgetData<int>(
+        'next_prayer_at',
+        nextPrayerTime?.millisecondsSinceEpoch ?? 0,
+      );
 
       await HomeWidget.updateWidget(
         name: 'PrayerWidgetSmall',
