@@ -15,6 +15,7 @@ import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object PrayerWidgetScheduler {
     private data class PrayerPoint(val name: String, val atMillis: Long)
@@ -91,11 +92,24 @@ object PrayerWidgetScheduler {
         val language = prefs.getString("widget_language", "ar") ?: "ar"
         val isArabic = language.lowercase().startsWith("ar")
         val use24Hour = prefs.getBoolean("widget_use_24h", true)
+        val timeZoneId = prefs.getString("widget_timezone", null)?.trim().orEmpty()
+        val selectedTimeZone = if (
+            timeZoneId.isNotEmpty() && TimeZone.getAvailableIDs().contains(timeZoneId)
+        ) {
+            TimeZone.getTimeZone(timeZoneId)
+        } else {
+            TimeZone.getDefault()
+        }
+        val locationName = prefs.getString("widget_location", "")?.trim().orEmpty()
         val localizedName = localizePrayer(next.name, isArabic)
         val locale = if (isArabic) Locale("ar") else Locale.ENGLISH
-        val dateFormat = SimpleDateFormat("EEE d MMMM", locale)
+        val dateFormat = SimpleDateFormat("EEE d MMMM", locale).apply {
+            timeZone = selectedTimeZone
+        }
         val timePattern = if (use24Hour) "HH:mm" else "h:mm a"
-        val timeFormat = SimpleDateFormat(timePattern, locale)
+        val timeFormat = SimpleDateFormat(timePattern, locale).apply {
+            timeZone = selectedTimeZone
+        }
         val dhikr = minuteDhikr(now, isArabic)
         val nextLabel = if (isArabic) "الصلاة التالية" else "Next prayer"
         val remainingLabel = if (isArabic) "متبقي" else "remaining"
@@ -121,6 +135,14 @@ object PrayerWidgetScheduler {
             views.setTextViewText(R.id.widget_dhikr, dhikr)
             views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
             views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
+            if (layoutRes == R.layout.widget_large) {
+                views.setTextViewText(
+                    R.id.widget_location,
+                    locationName.ifBlank {
+                        if (isArabic) "الموقع غير محدد" else "Location not set"
+                    },
+                )
+            }
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
             views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
             views.setOnClickPendingIntent(R.id.widget_root, openApp)

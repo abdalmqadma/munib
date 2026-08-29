@@ -91,6 +91,7 @@ class PrayerProvider with ChangeNotifier {
   List<SavedImsakiaLocation> get savedLocations => List.unmodifiable(_savedLocations);
   String? get activeLocationId => _activeLocationId;
   String get activeTimezone => _activeTimezone;
+  DateTime get currentLocationTime => _nowForActiveLocation();
 
   String get languageCode => language == 'English' ? 'en' : 'ar';
   Locale get locale => Locale(languageCode);
@@ -209,6 +210,7 @@ class PrayerProvider with ChangeNotifier {
     _activeLocationId = item.id;
     _activeTimezone = item.timezone;
     currentCity = item.label;
+    await WidgetService.saveLocation(item.name);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('currentCity', currentCity);
     await prefs.setString(_activeLocationKey, item.id);
@@ -275,11 +277,13 @@ class PrayerProvider with ChangeNotifier {
       currentCity = primary.label;
       await prefs.setString(_activeLocationKey, primary.id);
       await prefs.setString('currentCity', currentCity);
+      await WidgetService.saveLocation(primary.name);
       await _applyPrayers(primary.prayers);
     } else {
       _activeLocationId = null;
       _activeTimezone = '';
       await prefs.remove(_activeLocationKey);
+      await WidgetService.saveLocation(currentCity);
     }
 
     await WidgetService.savePreferences(
@@ -357,7 +361,10 @@ class PrayerProvider with ChangeNotifier {
     } else if (value is String) {
       await prefs.setString(key, value);
       if (key == 'adhanVoice') adhanVoice = value;
-      if (key == 'currentCity') currentCity = value;
+      if (key == 'currentCity') {
+        currentCity = value;
+        await WidgetService.saveLocation(value);
+      }
     }
     notifyListeners();
   }

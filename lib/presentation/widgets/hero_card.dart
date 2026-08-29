@@ -12,6 +12,7 @@ class HeroCard extends StatelessWidget {
     return Consumer<PrayerProvider>(
       builder: (context, provider, child) {
         final nextPrayer = provider.nextPrayerName;
+        final now = provider.currentLocationTime;
         final isSunset = nextPrayer.toLowerCase() == 'maghrib';
         final cardColor = isSunset ? const Color(0xFF2D1F1A) : Colors.white.withOpacity(0.05);
 
@@ -27,12 +28,12 @@ class HeroCard extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                DateFormat('HH:mm').format(DateTime.now()),
+                DateFormat('HH:mm').format(now),
                 style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
               Text(
-                DateFormat('EEEE, d MMMM', 'ar').format(DateTime.now()),
+                DateFormat('EEEE, d MMMM', 'ar').format(now),
                 style: const TextStyle(color: Colors.white38, fontSize: 14),
               ),
             ],

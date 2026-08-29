@@ -65,6 +65,17 @@ class WidgetService {
     }
   }
 
+  static Future<void> saveLocation(String locationName) async {
+    try {
+      await HomeWidget.saveWidgetData<String>(
+        'widget_location',
+        locationName.trim(),
+      );
+    } catch (e) {
+      debugPrint('Error saving widget location: $e');
+    }
+  }
+
   static DateTime? _parsePrayerTime(
     DateTime date,
     String raw,
