@@ -13,6 +13,7 @@ import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONArray
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
@@ -106,7 +107,16 @@ object PrayerWidgetScheduler {
         val dateFormat = SimpleDateFormat("EEE d MMMM", locale).apply {
             timeZone = selectedTimeZone
         }
-        val timePattern = if (use24Hour) "HH:mm" else "h:mm a"
+        val isMorning = Calendar.getInstance(selectedTimeZone).run {
+            timeInMillis = now
+            get(Calendar.AM_PM) == Calendar.AM
+        }
+        val timePattern = when {
+            use24Hour -> "HH:mm"
+            isArabic && isMorning -> "h:mm 'ص'"
+            isArabic -> "h:mm 'م'"
+            else -> "h:mm a"
+        }
         val timeFormat = SimpleDateFormat(timePattern, locale).apply {
             timeZone = selectedTimeZone
         }
