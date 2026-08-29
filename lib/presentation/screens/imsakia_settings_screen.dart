@@ -86,8 +86,8 @@ class ImsakiaSettingsScreen extends StatelessWidget {
           Text(
             _t(
               context,
-              'اضغط على مدينة لتفعيلها، واسحب المقبض لتغيير أولوية ظهورها.',
-              'Tap a city to activate it, then drag the handle to change its display priority.',
+              'اسحب المقبض لترتيب الأولوية: الأولى أساسية، الثانية جانبية، والباقي متوقف.',
+              'Drag to set priority: first is primary, second is secondary, and the rest are inactive.',
             ),
             style: theme.textTheme.bodySmall,
           ),
@@ -101,54 +101,70 @@ class ImsakiaSettingsScreen extends StatelessWidget {
               onReorder: provider.reorderSavedLocations,
               itemBuilder: (context, index) {
                 final location = provider.savedLocations[index];
-                final active = provider.activeLocationId == location.id;
+                final isPrimary = index == 0;
+                final isSecondary = index == 1;
                 return Padding(
                   key: ValueKey(location.id),
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: active
+                      color: isPrimary
                           ? scheme.primary.withValues(alpha: .10)
+                          : isSecondary
+                          ? scheme.secondary.withValues(alpha: .08)
                           : scheme.surface,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: active ? scheme.primary : scheme.outline,
-                        width: active ? 1.4 : 1,
+                        color: isPrimary
+                            ? scheme.primary
+                            : isSecondary
+                            ? scheme.secondary
+                            : scheme.outline,
+                        width: isPrimary || isSecondary ? 1.4 : 1,
                       ),
                     ),
                     child: ListTile(
-                      onTap: () => provider.activateSavedLocation(location.id),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 6,
                       ),
                       leading: Icon(
-                        active
-                            ? Icons.radio_button_checked_rounded
-                            : Icons.location_on_outlined,
-                        color: active
+                        isPrimary
+                            ? Icons.play_circle_fill_rounded
+                            : isSecondary
+                            ? Icons.view_sidebar_rounded
+                            : Icons.pause_circle_outline_rounded,
+                        color: isPrimary
                             ? scheme.primary
+                            : isSecondary
+                            ? scheme.secondary
                             : scheme.onSurfaceVariant,
                       ),
                       title: Text(
                         location.label,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: active
+                          fontWeight: isPrimary || isSecondary
                               ? FontWeight.w800
                               : FontWeight.w600,
                         ),
                       ),
                       subtitle: Text(
-                        active
+                        isPrimary
                             ? _t(
                                 context,
-                                'الإمساكية النشطة • الأولوية ${index + 1}',
-                                'Active Imsakia • Priority ${index + 1}',
+                                'الأساسية • تعمل افتراضيًا',
+                                'Primary • Active by default',
+                              )
+                            : isSecondary
+                            ? _t(
+                                context,
+                                'جانبية • تظهر مع الأساسية',
+                                'Secondary • Shown with primary',
                               )
                             : _t(
                                 context,
-                                'اضغط للتفعيل • الأولوية ${index + 1}',
-                                'Tap to activate • Priority ${index + 1}',
+                                'متوقفة • اسحبها للأعلى لتشغيلها',
+                                'Inactive • Drag up to enable',
                               ),
                       ),
                       trailing: Row(

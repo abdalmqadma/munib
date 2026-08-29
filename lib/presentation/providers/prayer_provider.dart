@@ -163,7 +163,9 @@ class PrayerProvider with ChangeNotifier {
       _savedLocations.add(item);
     }
 
-    await _activateLocation(item, persistLocations: true);
+    // Display priority is the source of truth: the first location is always
+    // the primary schedule, the second is secondary, and the rest are idle.
+    await _activateLocation(_savedLocations.first, persistLocations: true);
   }
 
   Future<void> _snapshotCurrentImsakiaIfNeeded() async {
@@ -186,12 +188,6 @@ class PrayerProvider with ChangeNotifier {
     await _persistSavedLocations();
   }
 
-  Future<void> activateSavedLocation(String id) async {
-    final item = _savedLocations.where((e) => e.id == id).firstOrNull;
-    if (item == null) return;
-    await _activateLocation(item, persistLocations: false);
-  }
-
   Future<void> reorderSavedLocations(int oldIndex, int newIndex) async {
     if (oldIndex < 0 || oldIndex >= _savedLocations.length) return;
     if (newIndex > oldIndex) newIndex -= 1;
@@ -200,8 +196,10 @@ class PrayerProvider with ChangeNotifier {
 
     final item = _savedLocations.removeAt(oldIndex);
     _savedLocations.insert(newIndex, item);
-    await _persistSavedLocations();
+    // Update the list immediately so drag-and-drop feels responsive, then
+    // switch the app and native widgets to the new highest-priority location.
     notifyListeners();
+    await _activateLocation(_savedLocations.first, persistLocations: true);
   }
 
   Future<void> _activateLocation(
@@ -219,16 +217,14 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> removeSavedLocation(String id) async {
-    final wasActive = _activeLocationId == id;
     _savedLocations.removeWhere((e) => e.id == id);
-    if (wasActive) {
-      if (_savedLocations.isNotEmpty) {
-        await _activateLocation(_savedLocations.first, persistLocations: false);
-      } else {
-        _activeLocationId = null;
-        _activeTimezone = '';
-      }
+    if (_savedLocations.isNotEmpty) {
+      await _activateLocation(_savedLocations.first, persistLocations: true);
+      return;
     }
+
+    _activeLocationId = null;
+    _activeTimezone = '';
     await _persistSavedLocations();
     notifyListeners();
   }
@@ -241,6 +237,8 @@ class PrayerProvider with ChangeNotifier {
     );
     if (_activeLocationId != null) {
       await prefs.setString(_activeLocationKey, _activeLocationId!);
+    } else {
+      await prefs.remove(_activeLocationKey);
     }
   }
 
@@ -270,15 +268,18 @@ class PrayerProvider with ChangeNotifier {
         }
       } catch (_) {}
     }
-    _activeLocationId = prefs.getString(_activeLocationKey);
-    if (_activeLocationId != null) {
-      final matches = _savedLocations.where((e) => e.id == _activeLocationId);
-      if (matches.isNotEmpty) {
-        final active = matches.first;
-        _activeTimezone = active.timezone;
-        currentCity = active.label;
-        await _applyPrayers(active.prayers);
-      }
+    if (_savedLocations.isNotEmpty) {
+      final primary = _savedLocations.first;
+      _activeLocationId = primary.id;
+      _activeTimezone = primary.timezone;
+      currentCity = primary.label;
+      await prefs.setString(_activeLocationKey, primary.id);
+      await prefs.setString('currentCity', currentCity);
+      await _applyPrayers(primary.prayers);
+    } else {
+      _activeLocationId = null;
+      _activeTimezone = '';
+      await prefs.remove(_activeLocationKey);
     }
 
     await WidgetService.savePreferences(
