@@ -134,14 +134,18 @@ object PrayerWidgetScheduler {
             views.setTextViewText(R.id.widget_remaining_label, remainingLabel)
             views.setTextViewText(R.id.widget_dhikr, dhikr)
             views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
-            views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             if (layoutRes == R.layout.widget_large) {
+                views.setCharSequence(R.id.widget_current_time, "setFormat12Hour", timePattern)
+                views.setCharSequence(R.id.widget_current_time, "setFormat24Hour", timePattern)
+                views.setString(R.id.widget_current_time, "setTimeZone", selectedTimeZone.id)
                 views.setTextViewText(
                     R.id.widget_location,
                     locationName.ifBlank {
                         if (isArabic) "الموقع غير محدد" else "Location not set"
                     },
                 )
+            } else {
+                views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             }
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
             views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
