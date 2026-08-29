@@ -142,7 +142,7 @@
                 android:text="Deir al Balah"
                 android:textColor="#D9F4C76A"
                 android:textDirection="locale"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
 
             <LinearLayout
                 android:layout_width="140dp"
@@ -156,11 +156,13 @@
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
                     android:gravity="end"
+                    android:includeFontPadding="false"
+                    android:layout_marginBottom="2dp"
                     android:maxLines="1"
                     android:text="الأحد 23 أغسطس"
                     android:textColor="#BFFFFFFF"
                     android:textDirection="locale"
-                    android:textSize="9sp" />
+                    android:textSize="11sp" />
 
                 <TextClock
                     android:id="@+id/widget_current_time"
