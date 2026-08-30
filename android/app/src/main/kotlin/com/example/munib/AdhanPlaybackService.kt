@@ -25,6 +25,7 @@ class AdhanPlaybackService : Service() {
         private const val MAX_AUDIO_BYTES = 15L * 1024L * 1024L
         private const val CONNECT_TIMEOUT_MS = 10_000
         private const val READ_TIMEOUT_MS = 20_000
+        private val supportedPrayers = setOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
 
         private const val MADINAH_URL =
             "https://raw.githubusercontent.com/Kiwifu/adhan-mp3/main/Adhan_Al_Haram_Al_Madani_-_Al_Madinah_1_(%D8%A3%D8%B0%D8%A7%D9%86_%D8%A7%D9%84%D8%AD%D8%B1%D9%85_%D8%A7%D9%84%D9%85%D8%AF%D9%86%D9%8A_-_%D8%A7%D9%84%D9%85%D8%AF%D9%8A%D9%86%D8%A9_%D8%A7%D9%84%D9%85%D9%86%D9%88%D8%B1%D8%A9).mp3"
@@ -158,13 +159,13 @@ class AdhanPlaybackService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val id = intent?.getIntExtra(PrayerAlarmReceiver.EXTRA_NOTIFICATION_ID, -1) ?: -1
-        val requestedPrayer = intent?.getStringExtra(PrayerAlarmReceiver.EXTRA_PRAYER)
+        val requestedPrayer = intent
+            ?.getStringExtra(PrayerAlarmReceiver.EXTRA_PRAYER)
+            ?.takeIf { it in supportedPrayers }
         val requestedLanguage = intent?.getStringExtra(PrayerAlarmReceiver.EXTRA_LANGUAGE) ?: "ar"
         val voice = intent?.getStringExtra(PrayerAlarmReceiver.EXTRA_VOICE) ?: "Madinah"
 
-        if (id < 0 || requestedPrayer !in setOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha") ||
-            voice !in setOf("Madinah", "Meccan")
-        ) {
+        if (id < 0 || requestedPrayer == null || voice !in setOf("Madinah", "Meccan")) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
