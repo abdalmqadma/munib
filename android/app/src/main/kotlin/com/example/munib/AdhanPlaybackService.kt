@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import androidx.core.app.NotificationManagerCompat
 import java.io.File
 import java.io.FileOutputStream
@@ -216,6 +217,7 @@ class AdhanPlaybackService : Service() {
             .build()
 
         mediaPlayer = MediaPlayer().apply {
+            setWakeMode(applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
             setAudioAttributes(attributes)
             setDataSource(file.absolutePath)
             setOnPreparedListener { player ->
