@@ -29,6 +29,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         private const val CHANNEL_ID = "prayer_events_v2"
         private const val TAP_PREFS = "prayer_notification_taps"
         private const val DOUBLE_TAP_WINDOW_MS = 3_500L
+        private val supportedPrayers = setOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
 
         internal fun notification(
             context: Context,
@@ -189,13 +190,14 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         if (!notificationsAllowed(context)) return
 
         val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
-        val prayer = intent.getStringExtra(EXTRA_PRAYER)
+        val prayer = intent
+            .getStringExtra(EXTRA_PRAYER)
+            ?.takeIf { it in supportedPrayers }
+            ?: return
         val language = intent.getStringExtra(EXTRA_LANGUAGE) ?: "ar"
         val voice = intent.getStringExtra(EXTRA_VOICE) ?: "Madinah"
         val silent = intent.getBooleanExtra(EXTRA_SILENT, false)
-        if (id < 0 || prayer !in setOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")) {
-            return
-        }
+        if (id < 0) return
 
         if (silent || voice == "None") {
             NotificationManagerCompat.from(context).notify(
