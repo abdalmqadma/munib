@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:timezone/timezone.dart' as tz;
 
-import '../../data/models/prayer_day.dart';
 import '../../data/services/notification_service.dart';
-import '../../data/services/widget_service.dart';
+import '../../features/prayer_times/data/models/prayer_day.dart';
+import '../../features/prayer_times/data/widget_service.dart';
+import '../../features/prayer_times/domain/prayer_time_calculator.dart';
 
 class SavedImsakiaLocation {
   final String id;
@@ -123,7 +123,8 @@ class PrayerProvider with ChangeNotifier {
   List<SavedImsakiaLocation> get savedLocations => List.unmodifiable(_savedLocations);
   String? get activeLocationId => _activeLocationId;
   String get activeTimezone => _activeTimezone;
-  DateTime get currentLocationTime => _nowForActiveLocation();
+  DateTime get currentLocationTime =>
+      PrayerTimeCalculator.nowForTimezone(_activeTimezone);
   int? get morningAzkarMinuteOfDay => _morningAzkarMinuteOfDay;
   int get eveningAzkarMinuteOfDay => _eveningAzkarMinuteOfDay;
   Set<String> get enabledNotificationPrayers =>
@@ -636,52 +637,12 @@ class PrayerProvider with ChangeNotifier {
   Future<void> _syncNotifications() =>
       NotificationService.syncSchedule(_monthlyPrayers, _notificationConfig);
 
-  DateTime _nowForActiveLocation() {
-    if (_activeTimezone.trim().isNotEmpty) {
-      try {
-        return tz.TZDateTime.now(tz.getLocation(_activeTimezone));
-      } catch (_) {}
-    }
-    return DateTime.now();
-  }
-
-  Duration timeUntilPrayer(String prayerName) {
-    if (_monthlyPrayers.isEmpty) return Duration.zero;
-    final now = _nowForActiveLocation();
-    final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    final today = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull;
-    if (today == null) return Duration.zero;
-
-    String rawFor(PrayerDay day) {
-      switch (prayerName.toLowerCase()) {
-        case 'fajr':
-          return day.fajr;
-        case 'sunrise':
-          return day.sunrise;
-        case 'dhuhr':
-          return day.dhuhr;
-        case 'asr':
-          return day.asr;
-        case 'maghrib':
-          return day.maghrib;
-        case 'isha':
-          return day.isha;
-        default:
-          return '';
-      }
-    }
-
-    var target = _parseTime(rawFor(today), now, prayerName);
-    if (!target.isAfter(now)) {
-      final tomorrowReference = now.add(const Duration(days: 1));
-      final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
-      final tomorrow = _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
-      if (tomorrow == null) return Duration.zero;
-      target = _parseTime(rawFor(tomorrow), tomorrowReference, prayerName);
-    }
-    final difference = target.difference(now);
-    return difference.isNegative ? Duration.zero : difference;
-  }
+  Duration timeUntilPrayer(String prayerName) =>
+      PrayerTimeCalculator.timeUntilPrayer(
+        days: _monthlyPrayers,
+        timezone: _activeTimezone,
+        prayerName: prayerName,
+      );
 
   String formattedTimeUntilPrayer(String prayerName) =>
       _formatDuration(timeUntilPrayer(prayerName));
@@ -693,7 +654,7 @@ class PrayerProvider with ChangeNotifier {
   }
 
   void _updateCurrentStatus({bool forceWidgetUpdate = false}) {
-    final now = _nowForActiveLocation();
+    final now = PrayerTimeCalculator.nowForTimezone(_activeTimezone);
     if (_monthlyPrayers.isEmpty) {
       _currentDay = null;
       _nextPrayerName = '';
@@ -703,7 +664,13 @@ class PrayerProvider with ChangeNotifier {
     }
 
     final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    _currentDay = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull;
+    _currentDay = null;
+    for (final day in _monthlyPrayers) {
+      if (day.date == todayStr) {
+        _currentDay = day;
+        break;
+      }
+    }
 
     if (_currentDay == null) {
       _nextPrayerName = '';
@@ -713,7 +680,15 @@ class PrayerProvider with ChangeNotifier {
       return;
     }
 
-    _calculateNextPrayer(now);
+    final next = PrayerTimeCalculator.nextPrayer(
+      days: _monthlyPrayers,
+      timezone: _activeTimezone,
+      now: now,
+    );
+    _nextPrayerName = next?.name ?? '';
+    _nextPrayerTime = next?.dateTime;
+    final remaining = next?.dateTime.difference(now) ?? Duration.zero;
+    _timeLeft = remaining.isNegative ? Duration.zero : remaining;
     notifyListeners();
 
     final widgetStateKey =
@@ -730,85 +705,6 @@ class PrayerProvider with ChangeNotifier {
         languageCode: languageCode,
         use24HourFormat: use24HourFormat,
       ));
-    }
-  }
-
-  void _calculateNextPrayer(DateTime now) {
-    final day = _currentDay;
-    if (day == null) return;
-
-    final prayers = <String, String>{
-      'Fajr': day.fajr,
-      'Dhuhr': day.dhuhr,
-      'Asr': day.asr,
-      'Maghrib': day.maghrib,
-      'Isha': day.isha,
-    };
-
-    DateTime? nextTime;
-    String nextName = '';
-    for (final entry in prayers.entries) {
-      final prayerTime = _parseTime(entry.value, now, entry.key);
-      if (prayerTime.isAfter(now)) {
-        nextTime = prayerTime;
-        nextName = entry.key;
-        break;
-      }
-    }
-
-    if (nextTime == null) {
-      _nextPrayerName = 'Fajr';
-      final tomorrowReference = now.add(const Duration(days: 1));
-      final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
-      final tomorrowData =
-          _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
-      if (tomorrowData == null) {
-        _nextPrayerName = '';
-        _nextPrayerTime = null;
-        _timeLeft = Duration.zero;
-        return;
-      }
-      final tomorrowFajr =
-          _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
-      _nextPrayerTime = tomorrowFajr;
-      _timeLeft = tomorrowFajr.difference(now);
-      return;
-    }
-
-    _nextPrayerName = nextName;
-    _nextPrayerTime = nextTime;
-    _timeLeft = nextTime.difference(now);
-  }
-
-  DateTime _parseTime(String timeStr, DateTime referenceDate, String prayerName) {
-    try {
-      final parsed = DateFormat('HH:mm').parse(timeStr.trim());
-      var hour = parsed.hour;
-      if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) hour += 12;
-      if (prayerName == 'Dhuhr' && hour < 10) hour += 12;
-
-      if (_activeTimezone.trim().isNotEmpty) {
-        try {
-          final location = tz.getLocation(_activeTimezone);
-          return tz.TZDateTime(
-            location,
-            referenceDate.year,
-            referenceDate.month,
-            referenceDate.day,
-            hour,
-            parsed.minute,
-          );
-        } catch (_) {}
-      }
-      return DateTime(
-        referenceDate.year,
-        referenceDate.month,
-        referenceDate.day,
-        hour,
-        parsed.minute,
-      );
-    } catch (_) {
-      return referenceDate.add(const Duration(days: 1));
     }
   }
 
