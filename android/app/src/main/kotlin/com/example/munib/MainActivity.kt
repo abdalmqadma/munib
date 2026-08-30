@@ -11,9 +11,11 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val channelName = "com.example.munib/nafahat"
     private val prefsName = "nafahat_prefs"
+    private var pendingAzkarCategory: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        captureAzkarNavigation(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -56,9 +58,35 @@ class MainActivity : FlutterActivity() {
                         refreshNafahatIfRunning()
                         result.success(true)
                     }
+                    "setAzkarNafahatSchedule" -> {
+                        saveAzkarSchedule(
+                            morningEnabled = call.argument<Boolean>("morningEnabled") ?: true,
+                            morningAt = call.argument<Number>("morningAt")?.toLong() ?: 0L,
+                            eveningEnabled = call.argument<Boolean>("eveningEnabled") ?: true,
+                            eveningAt = call.argument<Number>("eveningAt")?.toLong() ?: 0L,
+                        )
+                        refreshNafahatIfRunning()
+                        result.success(true)
+                    }
+                    "consumePendingAzkarNavigation" -> {
+                        val category = pendingAzkarCategory
+                        pendingAzkarCategory = null
+                        result.success(category)
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        captureAzkarNavigation(intent)
+    }
+
+    private fun captureAzkarNavigation(intent: Intent?) {
+        val category = intent?.getStringExtra(NafahatBubbleService.EXTRA_OPEN_AZKAR_CATEGORY)
+        pendingAzkarCategory = category?.takeIf { it == "Morning" || it == "Evening" }
     }
 
     private fun startNafahat(result: MethodChannel.Result) {
@@ -100,6 +128,25 @@ class MainActivity : FlutterActivity() {
             .putStringSet("enabled_kinds", kinds)
             .putInt("interval_minutes", interval)
             .putBoolean("contextual_mode", contextualMode ?: true)
+            .apply()
+    }
+
+    private fun saveAzkarSchedule(
+        morningEnabled: Boolean,
+        morningAt: Long,
+        eveningEnabled: Boolean,
+        eveningAt: Long,
+    ) {
+        val now = System.currentTimeMillis()
+        val maxFuture = now + 48L * 60L * 60L * 1000L
+        val safeMorning = morningAt.takeIf { it in 1..maxFuture } ?: 0L
+        val safeEvening = eveningAt.takeIf { it in 1..maxFuture } ?: 0L
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+            .edit()
+            .putBoolean("morning_azkar_enabled", morningEnabled)
+            .putLong("morning_azkar_at", safeMorning)
+            .putBoolean("evening_azkar_enabled", eveningEnabled)
+            .putLong("evening_azkar_at", safeEvening)
             .apply()
     }
 
