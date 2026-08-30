@@ -10,7 +10,7 @@ import 'firebase_options.dart';
 import 'core/app_colors.dart';
 import 'core/app_theme.dart';
 import 'presentation/providers/prayer_provider.dart';
-import 'presentation/providers/theme_provider.dart';
+import 'features/settings/presentation/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
