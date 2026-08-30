@@ -19,6 +19,10 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool photoBusy = false;
 
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
+
+  String t(String ar, String en) => _isArabic ? ar : en;
+
   Future<void> changePhoto(User user) async {
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
@@ -27,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       maxHeight: 1200,
     );
     if (picked == null || !mounted) return;
+
     setState(() => photoBusy = true);
     try {
       final ref = FirebaseStorage.instance.ref('profile_photos/${user.uid}.jpg');
@@ -45,7 +50,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Photo upload failed: ${e.code}')),
+          SnackBar(
+            content: Text(
+              t(
+                'تعذر رفع الصورة. حاول مرة أخرى. (${e.code})',
+                'Could not upload the photo. Try again. (${e.code})',
+              ),
+            ),
+          ),
         );
       }
     } finally {
@@ -88,7 +100,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(title: Text(context.tr('profile'))),
       body: SafeArea(
         child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .snapshots(),
           builder: (context, snapshot) {
             final data = snapshot.data?.data();
             final name = (data?['name'] as String?)?.trim().isNotEmpty == true
@@ -103,7 +118,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 30,
+                  ),
                   decoration: BoxDecoration(
                     color: scheme.surface,
                     borderRadius: BorderRadius.circular(28),
@@ -120,36 +138,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ? NetworkImage(photo!)
                                 : null,
                             child: (photo ?? '').isEmpty
-                                ? Icon(Icons.person_rounded, size: 48, color: scheme.primary)
+                                ? Icon(
+                                    Icons.person_rounded,
+                                    size: 48,
+                                    color: scheme.primary,
+                                  )
                                 : null,
                           ),
                           Positioned(
                             right: 0,
                             bottom: 0,
                             child: IconButton.filled(
-                              onPressed: photoBusy ? null : () => changePhoto(user),
+                              onPressed:
+                                  photoBusy ? null : () => changePhoto(user),
                               icon: photoBusy
                                   ? const SizedBox(
                                       width: 18,
                                       height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
-                                  : const Icon(Icons.camera_alt_rounded, size: 18),
+                                  : const Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 18,
+                                    ),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 18),
-                      Text(name, style: Theme.of(context).textTheme.headlineSmall),
+                      Text(
+                        name,
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
                       if (email.isNotEmpty) ...[
                         const SizedBox(height: 6),
-                        Text(email, style: Theme.of(context).textTheme.bodyMedium),
+                        Text(
+                          email,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
                       ],
                       const SizedBox(height: 8),
                       TextButton.icon(
                         onPressed: photoBusy ? null : () => changePhoto(user),
                         icon: const Icon(Icons.edit_rounded, size: 18),
-                        label: const Text('Change profile photo'),
+                        label: Text(
+                          t(
+                            'تغيير صورة الملف الشخصي',
+                            'Change profile photo',
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -164,7 +203,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _InfoTile(
                   icon: Icons.verified_user_outlined,
                   title: context.tr('accountType'),
-                  value: user.providerData.any((p) => p.providerId == 'google.com')
+                  value: user.providerData
+                          .any((provider) => provider.providerId == 'google.com')
                       ? 'Google'
                       : context.tr('emailAccount'),
                 ),
@@ -194,7 +234,12 @@ class _InfoTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String value;
-  const _InfoTile({required this.icon, required this.title, required this.value});
+
+  const _InfoTile({
+    required this.icon,
+    required this.title,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) {
