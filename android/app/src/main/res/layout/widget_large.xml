@@ -111,23 +111,25 @@
             android:layout_above="@id/widget_large_footer"
             android:ellipsize="end"
             android:gravity="center_vertical|start"
+            android:includeFontPadding="false"
             android:maxLines="2"
+            android:minHeight="34dp"
             android:paddingTop="8dp"
             android:paddingBottom="6dp"
             android:text="أستغفر الله وأتوب إليه"
             android:textColor="#E6FFFFFF"
             android:textDirection="locale"
-            android:textSize="10sp" />
+            android:textSize="11sp" />
 
         <LinearLayout
             android:id="@+id/widget_large_footer"
             android:layout_width="match_parent"
-            android:layout_height="58dp"
+            android:layout_height="62dp"
             android:layout_alignParentBottom="true"
             android:gravity="bottom|center_vertical"
             android:orientation="horizontal"
             android:paddingStart="4dp"
-            android:paddingEnd="8dp">
+            android:paddingEnd="4dp">
 
             <TextView
                 android:id="@+id/widget_location"
@@ -138,14 +140,14 @@
                 android:gravity="bottom|start"
                 android:maxLines="1"
                 android:paddingBottom="2dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="10dp"
                 android:text="Deir al Balah"
                 android:textColor="#D9F4C76A"
                 android:textDirection="locale"
                 android:textSize="18sp" />
 
             <LinearLayout
-                android:layout_width="140dp"
+                android:layout_width="156dp"
                 android:layout_height="match_parent"
                 android:gravity="bottom|end"
                 android:orientation="vertical">
@@ -157,19 +159,19 @@
                     android:ellipsize="end"
                     android:gravity="end"
                     android:includeFontPadding="false"
-                    android:layout_marginBottom="2dp"
+                    android:layout_marginBottom="3dp"
                     android:maxLines="1"
                     android:text="الأحد 23 أغسطس"
                     android:textColor="#BFFFFFFF"
                     android:textDirection="locale"
                     android:textFontWeight="500"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
 
                 <TextClock
                     android:id="@+id/widget_current_time"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:format12Hour="HH:mm"
+                    android:format12Hour="h:mm a"
                     android:format24Hour="HH:mm"
                     android:gravity="bottom|end"
                     android:includeFontPadding="false"
@@ -178,7 +180,7 @@
                     android:text="18:29"
                     android:textColor="#FFFFFFFF"
                     android:textDirection="ltr"
-                    android:textSize="34sp"
+                    android:textSize="29sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
@@ -216,5 +218,4 @@
             android:textColor="#E6FFFFFF"
             android:textSize="10sp" />
     </LinearLayout>
-
 </FrameLayout>
