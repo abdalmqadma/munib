@@ -72,13 +72,22 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: _goTo,
         items: [
-          BottomNavigationBarItem(icon: const Icon(Icons.home_filled), label: context.tr('home')),
-          BottomNavigationBarItem(icon: const Icon(Icons.nightlight_round), label: context.tr('azkar')),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.home_filled),
+            label: context.tr('home'),
+          ),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.nightlight_round),
+            label: context.tr('azkar'),
+          ),
           BottomNavigationBarItem(
             icon: const Icon(Icons.bubble_chart_rounded),
-            label: isArabic ? 'نفحات' : 'Reflections',
+            label: isArabic ? 'نفحات' : 'Nafahat',
           ),
-          BottomNavigationBarItem(icon: const Icon(Icons.settings_outlined), label: context.tr('settings')),
+          BottomNavigationBarItem(
+            icon: const Icon(Icons.settings_outlined),
+            label: context.tr('settings'),
+          ),
         ],
       ),
     );
@@ -106,10 +115,9 @@ class _HomeContentState extends State<HomeContent> {
     if (!mounted) return;
     final provider = context.read<PrayerProvider>();
 
-    // A manually selected/saved Imsakia location is authoritative. Only fill
-    // the header from the device location when no schedule location is active.
     if (provider.activeLocationId != null ||
-        (provider.currentCity.trim().isNotEmpty && provider.currentCity != 'غير محدد')) {
+        (provider.currentCity.trim().isNotEmpty &&
+            provider.currentCity != 'غير محدد')) {
       return;
     }
 
@@ -117,13 +125,12 @@ class _HomeContentState extends State<HomeContent> {
     if (!await locationService.hasGrantedPermission()) return;
 
     try {
-      final location = await locationService.getCurrentLocation(requestPermission: false);
+      final location =
+          await locationService.getCurrentLocation(requestPermission: false);
       if (!mounted) return;
       setState(() => _locationName = location.city);
       await provider.updateSetting('currentCity', location.city);
-    } catch (_) {
-      // Do not interrupt Home if reverse geocoding/GPS is temporarily unavailable.
-    }
+    } catch (_) {}
   }
 
   Future<void> _fetchByLocation() async {
@@ -131,7 +138,8 @@ class _HomeContentState extends State<HomeContent> {
     setState(() => _isAutoFetching = true);
     final provider = context.read<PrayerProvider>();
     try {
-      final location = await LocationService().getCurrentLocation(requestPermission: true);
+      final location =
+          await LocationService().getCurrentLocation(requestPermission: true);
       if (mounted) setState(() => _locationName = location.city);
       final result = await AIService().fetchPrayerTimesForLocation(
         location.latitude,
@@ -142,7 +150,8 @@ class _HomeContentState extends State<HomeContent> {
 
       final parts = location.city.split(',');
       final city = parts.isNotEmpty ? parts.first.trim() : location.city;
-      final country = parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
+      final country =
+          parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
       await provider.addLocationImsakia(
         name: city,
         country: country,
@@ -160,7 +169,8 @@ class _HomeContentState extends State<HomeContent> {
               : e.toString().contains('permission_denied')
                   ? context.tr('locationPermissionDenied')
                   : context.tr('fetchFailed');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => _isAutoFetching = false);
     }
@@ -179,7 +189,15 @@ class _HomeContentState extends State<HomeContent> {
             _HomeHeader(locationName: _locationName ?? provider.currentCity),
             const SizedBox(height: 24),
             if (provider.monthlyPrayers.isEmpty)
-              _EmptyState(loading: _isAutoFetching, onFetch: _fetchByLocation)
+              _EmptyState(
+                loading: _isAutoFetching,
+                onFetch: _fetchByLocation,
+              )
+            else if (provider.currentDay == null)
+              _ScheduleUnavailableState(
+                loading: _isAutoFetching,
+                onFetch: _fetchByLocation,
+              )
             else ...[
               const MunibUltimateWidget(),
               const SizedBox(height: 24),
@@ -202,9 +220,10 @@ class _HomeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final scheme = Theme.of(context).colorScheme;
-    final effectiveLocation = locationName.trim().isEmpty || locationName == 'غير محدد'
-        ? context.tr('locationUnknown')
-        : locationName;
+    final effectiveLocation =
+        locationName.trim().isEmpty || locationName == 'غير محدد'
+            ? context.tr('locationUnknown')
+            : locationName;
 
     return Row(
       children: [
@@ -217,8 +236,12 @@ class _HomeHeader extends StatelessWidget {
           child: CircleAvatar(
             radius: 23,
             backgroundColor: scheme.primaryContainer,
-            foregroundImage: user?.photoURL?.isNotEmpty == true ? NetworkImage(user!.photoURL!) : null,
-            child: user?.photoURL?.isNotEmpty == true ? null : Icon(Icons.person_rounded, color: scheme.primary),
+            foregroundImage: user?.photoURL?.isNotEmpty == true
+                ? NetworkImage(user!.photoURL!)
+                : null,
+            child: user?.photoURL?.isNotEmpty == true
+                ? null
+                : Icon(Icons.person_rounded, color: scheme.primary),
           ),
         ),
         const SizedBox(width: 14),
@@ -226,11 +249,18 @@ class _HomeHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.tr('hello'), style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                context.tr('hello'),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 3),
               Row(
                 children: [
-                  Icon(Icons.location_on_outlined, size: 15, color: scheme.primary),
+                  Icon(
+                    Icons.location_on_outlined,
+                    size: 15,
+                    color: scheme.primary,
+                  ),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
@@ -249,7 +279,9 @@ class _HomeHeader extends StatelessWidget {
           tooltip: context.tr('notifications'),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const NotificationsSettingsScreen()),
+            MaterialPageRoute(
+              builder: (_) => const NotificationsSettingsScreen(),
+            ),
           ),
           icon: const Icon(Icons.notifications_none_rounded),
         ),
@@ -278,9 +310,15 @@ class _NextPrayerSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(context.tr('nextPrayer'), style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  context.tr('nextPrayer'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: 6),
-                Text(_localizedPrayer(context, provider.nextPrayerName), style: Theme.of(context).textTheme.headlineSmall),
+                Text(
+                  _localizedPrayer(context, provider.nextPrayerName),
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
               ],
             ),
           ),
@@ -293,8 +331,8 @@ class _NextPrayerSummary extends StatelessWidget {
                 provider.timeLeftFormatted,
                 textDirection: TextDirection.ltr,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
               ),
             ],
           ),
@@ -332,7 +370,10 @@ class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(context.tr('todayPrayerTimes'), style: Theme.of(context).textTheme.titleLarge),
+        Text(
+          context.tr('todayPrayerTimes'),
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
         const SizedBox(height: 14),
         ...rows.map((row) {
           final expanded = _expandedPrayer == row.$4;
@@ -342,10 +383,14 @@ class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
               name: context.tr(row.$1),
               time: provider.formatPrayerTime(row.$2),
               icon: row.$3,
-              isActive: provider.nextPrayerName.toLowerCase() == row.$4.toLowerCase(),
+              isActive: provider.nextPrayerName.toLowerCase() ==
+                  row.$4.toLowerCase(),
               isExpanded: expanded,
-              countdown: expanded ? provider.formattedTimeUntilPrayer(row.$4) : null,
-              countdownLabel: isArabic ? 'متبقي حتى ${context.tr(row.$1)}' : 'Until ${context.tr(row.$1)}',
+              countdown:
+                  expanded ? provider.formattedTimeUntilPrayer(row.$4) : null,
+              countdownLabel: isArabic
+                  ? 'متبقي حتى ${context.tr(row.$1)}'
+                  : 'Until ${context.tr(row.$1)}',
               onTap: () => setState(() {
                 _expandedPrayer = expanded ? null : row.$4;
               }),
@@ -364,6 +409,57 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _PrayerDataActionCard(
+      icon: Icons.my_location_rounded,
+      title: context.tr('noPrayerTimes'),
+      body: context.tr('uploadOrLocation'),
+      loading: loading,
+      onFetch: onFetch,
+    );
+  }
+}
+
+class _ScheduleUnavailableState extends StatelessWidget {
+  final bool loading;
+  final Future<void> Function() onFetch;
+
+  const _ScheduleUnavailableState({
+    required this.loading,
+    required this.onFetch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ar = Localizations.localeOf(context).languageCode == 'ar';
+    return _PrayerDataActionCard(
+      icon: Icons.event_busy_rounded,
+      title: ar ? 'لا توجد مواقيت لليوم' : 'No prayer times for today',
+      body: ar
+          ? 'الإمساكية المحفوظة لا تغطي تاريخ اليوم. حدّث المواقيت من موقعك أو ارفع إمساكية أحدث.'
+          : 'The saved schedule does not cover today. Refresh from your location or upload a newer Imsakia.',
+      loading: loading,
+      onFetch: onFetch,
+    );
+  }
+}
+
+class _PrayerDataActionCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String body;
+  final bool loading;
+  final Future<void> Function() onFetch;
+
+  const _PrayerDataActionCard({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.loading,
+    required this.onFetch,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(28),
@@ -374,11 +470,19 @@ class _EmptyState extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(Icons.my_location_rounded, size: 64, color: scheme.primary),
+          Icon(icon, size: 64, color: scheme.primary),
           const SizedBox(height: 18),
-          Text(context.tr('noPrayerTimes'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const SizedBox(height: 10),
-          Text(context.tr('uploadOrLocation'), textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
+          Text(
+            body,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 24),
           if (loading)
             const CircularProgressIndicator()
@@ -414,12 +518,19 @@ class _EmptyState extends StatelessWidget {
 
 String _localizedPrayer(BuildContext context, String prayer) {
   switch (prayer.toLowerCase()) {
-    case 'fajr': return context.tr('fajr');
-    case 'sunrise': return context.tr('sunrise');
-    case 'dhuhr': return context.tr('dhuhr');
-    case 'asr': return context.tr('asr');
-    case 'maghrib': return context.tr('maghrib');
-    case 'isha': return context.tr('isha');
-    default: return prayer;
+    case 'fajr':
+      return context.tr('fajr');
+    case 'sunrise':
+      return context.tr('sunrise');
+    case 'dhuhr':
+      return context.tr('dhuhr');
+    case 'asr':
+      return context.tr('asr');
+    case 'maghrib':
+      return context.tr('maghrib');
+    case 'isha':
+      return context.tr('isha');
+    default:
+      return prayer;
   }
 }
