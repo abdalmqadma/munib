@@ -79,6 +79,8 @@ Canonical feature locations now include:
 - `lib/features/location/data/place_search_service.dart`
 - `lib/features/settings/presentation/theme_provider.dart`
 - `lib/features/prayer_times/data/models/prayer_day.dart`
+- `lib/features/prayer_times/data/models/saved_imsakia_location.dart`
+- `lib/features/prayer_times/data/saved_imsakia_location_store.dart`
 - `lib/features/prayer_times/data/widget_service.dart`
 - `lib/features/prayer_times/domain/prayer_time_calculator.dart`
 - `lib/features/notifications/data/adhan_bridge_service.dart`
@@ -88,13 +90,14 @@ Legacy paths temporarily re-export migrated modules. New code should import the 
 
 Prayer-time calculation is now owned by a pure domain component and reused by both `PrayerProvider` and the home prayer widget instead of being duplicated in presentation code.
 
+Saved-location JSON serialization and SharedPreferences storage now live behind `SavedImsakiaLocationStore`; `PrayerProvider` consumes the store and no longer owns those persistence details.
+
 ## Refactor priorities
 
 1. Split notification settings and scheduling responsibilities out of `PrayerProvider`.
-2. Move saved-location serialization/persistence out of `PrayerProvider`.
-3. Break large screens into focused sections/widgets where that improves readability.
-4. Move remaining cross-feature services into their owning features when the ownership is clear.
-5. Keep adding focused unit tests around extracted business rules before removing legacy compatibility paths.
+2. Break large screens into focused sections/widgets where that improves readability.
+3. Move remaining cross-feature services into their owning features when the ownership is clear.
+4. Keep adding focused unit tests around extracted business rules before removing legacy compatibility paths.
 
 ## Rules of thumb
 
