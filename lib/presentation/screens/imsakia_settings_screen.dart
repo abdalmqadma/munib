@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../core/app_strings.dart';
 import '../providers/prayer_provider.dart';
 import 'location_imsakia_screen.dart';
-import 'upload_screen.dart';
 
 class ImsakiaSettingsScreen extends StatelessWidget {
   const ImsakiaSettingsScreen({super.key});
@@ -35,7 +34,10 @@ class ImsakiaSettingsScreen extends StatelessWidget {
             child: Column(
               children: [
                 ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   leading: Container(
                     padding: const EdgeInsets.all(9),
                     decoration: BoxDecoration(
@@ -44,7 +46,10 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                     ),
                     child: Icon(Icons.schedule_rounded, color: scheme.primary),
                   ),
-                  title: Text(context.tr('timeFormat'), style: theme.textTheme.titleMedium),
+                  title: Text(
+                    context.tr('timeFormat'),
+                    style: theme.textTheme.titleMedium,
+                  ),
                   subtitle: Text(
                     provider.use24HourFormat
                         ? context.tr('timeFormat24')
@@ -79,8 +84,10 @@ class ImsakiaSettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            _t(context, 'مواقع الإمساكية', 'Imsakia locations'),
-            style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            _t(context, 'مواقع المواقيت', 'Prayer time locations'),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
@@ -103,6 +110,7 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                 final location = provider.savedLocations[index];
                 final isPrimary = index == 0;
                 final isSecondary = index == 1;
+
                 return Padding(
                   key: ValueKey(location.id),
                   padding: const EdgeInsets.only(bottom: 10),
@@ -111,15 +119,15 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                       color: isPrimary
                           ? scheme.primary.withValues(alpha: .10)
                           : isSecondary
-                          ? scheme.secondary.withValues(alpha: .08)
-                          : scheme.surface,
+                              ? scheme.secondary.withValues(alpha: .08)
+                              : scheme.surface,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: isPrimary
                             ? scheme.primary
                             : isSecondary
-                            ? scheme.secondary
-                            : scheme.outline,
+                                ? scheme.secondary
+                                : scheme.outline,
                         width: isPrimary || isSecondary ? 1.4 : 1,
                       ),
                     ),
@@ -132,13 +140,13 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                         isPrimary
                             ? Icons.play_circle_fill_rounded
                             : isSecondary
-                            ? Icons.view_sidebar_rounded
-                            : Icons.pause_circle_outline_rounded,
+                                ? Icons.view_sidebar_rounded
+                                : Icons.pause_circle_outline_rounded,
                         color: isPrimary
                             ? scheme.primary
                             : isSecondary
-                            ? scheme.secondary
-                            : scheme.onSurfaceVariant,
+                                ? scheme.secondary
+                                : scheme.onSurfaceVariant,
                       ),
                       title: Text(
                         location.label,
@@ -156,16 +164,16 @@ class ImsakiaSettingsScreen extends StatelessWidget {
                                 'Primary • Active by default',
                               )
                             : isSecondary
-                            ? _t(
-                                context,
-                                'جانبية • تظهر مع الأساسية',
-                                'Secondary • Shown with primary',
-                              )
-                            : _t(
-                                context,
-                                'متوقفة • اسحبها للأعلى لتشغيلها',
-                                'Inactive • Drag up to enable',
-                              ),
+                                ? _t(
+                                    context,
+                                    'جانبية • تظهر مع الأساسية',
+                                    'Secondary • Shown with primary',
+                                  )
+                                : _t(
+                                    context,
+                                    'متوقفة • اسحبها للأعلى لتشغيلها',
+                                    'Inactive • Drag up to enable',
+                                  ),
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -205,36 +213,18 @@ class ImsakiaSettingsScreen extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const LocationImsakiaScreen()),
+                MaterialPageRoute(
+                  builder: (_) => const LocationImsakiaScreen(),
+                ),
               ),
               icon: const Icon(Icons.add_location_alt_outlined),
-              label: Text(_t(context, 'إضافة موقع من أي مكان في العالم', 'Add a location anywhere in the world')),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            decoration: BoxDecoration(
-              color: scheme.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: scheme.outline),
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const UploadScreen()),
-              ),
-              leading: Container(
-                padding: const EdgeInsets.all(9),
-                decoration: BoxDecoration(
-                  color: scheme.primary.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(12),
+              label: Text(
+                _t(
+                  context,
+                  'إضافة موقع من أي مكان في العالم',
+                  'Add a location anywhere in the world',
                 ),
-                child: Icon(Icons.cloud_upload_outlined, color: scheme.primary),
               ),
-              title: Text(context.tr('changeImsakia'), style: theme.textTheme.titleMedium),
-              subtitle: Text(context.tr('changeImsakiaHint'), style: theme.textTheme.bodySmall),
-              trailing: const Icon(Icons.chevron_right_rounded),
             ),
           ),
         ],
