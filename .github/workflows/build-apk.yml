@@ -1,4 +1,4 @@
-name: Build Munib APK
+name: Munib Code Checks
 
 on:
   push:
@@ -16,9 +16,9 @@ permissions:
   contents: read
 
 jobs:
-  build-apk:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,19 +43,3 @@ jobs:
 
       - name: Test
         run: flutter test
-
-      - name: Configure build memory
-        run: |
-          sed -i 's/-Xmx2048m/-Xmx4g/' android/gradle.properties
-          sed -i 's/kotlin.daemon.jvm.options=-Xmx1024m/kotlin.daemon.jvm.options=-Xmx2g/' android/gradle.properties
-
-      - name: Build ARM64 debug APK
-        run: flutter build apk --debug --target-platform android-arm64
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: munib-debug-apk
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
