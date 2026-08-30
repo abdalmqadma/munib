@@ -7,6 +7,58 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:372276574383:android:1179fb5a7a4af0ad27fc5a",
+        "android_client_info": {
+          "package_name": "com.abdalmqadma.munib"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "372276574383-5kdilqs767816g1pota21ldbfk3h15e7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.abdalmqadma.munib",
+            "certificate_hash": "56a580fae9875cc8ddcd57e655c96d68a0dc3a1a"
+          }
+        },
+        {
+          "client_id": "372276574383-sbm9fd6m12ivu4up92qk551kvhfff2oi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.abdalmqadma.munib",
+            "certificate_hash": "2000514772eeea1fea4751b2945ae6c34a152b8d"
+          }
+        },
+        {
+          "client_id": "372276574383-um671tah7nqjsgplvbl8sp9ua7vsaf7a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGs_F86tpTNbXyjTGUuNERQTZuvCWo_cg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "372276574383-um671tah7nqjsgplvbl8sp9ua7vsaf7a.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "372276574383-bc9ba2u4lon70tu4mrp6lorkgp8cm101.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.munib"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:372276574383:android:6ea6f89d718cd3b127fc5a",
         "android_client_info": {
           "package_name": "com.example.munib"
