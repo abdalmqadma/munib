@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -15,7 +13,6 @@ import 'azkar_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
-import 'upload_screen.dart';
 import 'widget_preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -137,10 +134,12 @@ class _HomeContentState extends State<HomeContent> {
     if (_isAutoFetching) return;
     setState(() => _isAutoFetching = true);
     final provider = context.read<PrayerProvider>();
+
     try {
       final location =
           await LocationService().getCurrentLocation(requestPermission: true);
       if (mounted) setState(() => _locationName = location.city);
+
       final result = await AIService().fetchPrayerTimesForLocation(
         location.latitude,
         location.longitude,
@@ -152,6 +151,7 @@ class _HomeContentState extends State<HomeContent> {
       final city = parts.isNotEmpty ? parts.first.trim() : location.city;
       final country =
           parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
+
       await provider.addLocationImsakia(
         name: city,
         country: country,
@@ -179,6 +179,7 @@ class _HomeContentState extends State<HomeContent> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<PrayerProvider>();
+
     return SafeArea(
       child: RefreshIndicator(
         onRefresh: _fetchByLocation,
@@ -297,6 +298,7 @@ class _NextPrayerSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -331,8 +333,8 @@ class _NextPrayerSummary extends StatelessWidget {
                 provider.timeLeftFormatted,
                 textDirection: TextDirection.ltr,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),
@@ -358,6 +360,7 @@ class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
     final provider = widget.provider;
     final day = provider.currentDay;
     if (day == null) return const SizedBox.shrink();
+
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final rows = [
       ('fajr', day.fajr, Icons.bedtime_outlined, 'Fajr'),
@@ -367,6 +370,7 @@ class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
       ('maghrib', day.maghrib, Icons.sunny_snowing, 'Maghrib'),
       ('isha', day.isha, Icons.nightlight_outlined, 'Isha'),
     ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -405,14 +409,21 @@ class _PrayerTimesSectionState extends State<_PrayerTimesSection> {
 class _EmptyState extends StatelessWidget {
   final bool loading;
   final Future<void> Function() onFetch;
-  const _EmptyState({required this.loading, required this.onFetch});
+
+  const _EmptyState({
+    required this.loading,
+    required this.onFetch,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final ar = Localizations.localeOf(context).languageCode == 'ar';
     return _PrayerDataActionCard(
       icon: Icons.my_location_rounded,
       title: context.tr('noPrayerTimes'),
-      body: context.tr('uploadOrLocation'),
+      body: ar
+          ? 'استخدم موقعك لتحميل مواقيت الصلاة تلقائيًا.'
+          : 'Use your location to load prayer times automatically.',
       loading: loading,
       onFetch: onFetch,
     );
@@ -435,8 +446,8 @@ class _ScheduleUnavailableState extends StatelessWidget {
       icon: Icons.event_busy_rounded,
       title: ar ? 'لا توجد مواقيت لليوم' : 'No prayer times for today',
       body: ar
-          ? 'الإمساكية المحفوظة لا تغطي تاريخ اليوم. حدّث المواقيت من موقعك أو ارفع إمساكية أحدث.'
-          : 'The saved schedule does not cover today. Refresh from your location or upload a newer Imsakia.',
+          ? 'المواقيت المحفوظة لا تغطي تاريخ اليوم. حدّث المواقيت من موقعك.'
+          : 'The saved schedule does not cover today. Refresh prayer times from your location.',
       loading: loading,
       onFetch: onFetch,
     );
@@ -461,6 +472,7 @@ class _PrayerDataActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(
@@ -486,7 +498,7 @@ class _PrayerDataActionCard extends StatelessWidget {
           const SizedBox(height: 24),
           if (loading)
             const CircularProgressIndicator()
-          else ...[
+          else
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
@@ -495,21 +507,6 @@ class _PrayerDataActionCard extends StatelessWidget {
                 label: Text(context.tr('fetchCityTimes')),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(context.tr('or'), style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const UploadScreen()),
-                ),
-                icon: const Icon(Icons.upload_file_rounded),
-                label: Text(context.tr('uploadImsakia')),
-              ),
-            ),
-          ],
         ],
       ),
     );
