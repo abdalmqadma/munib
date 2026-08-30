@@ -51,6 +51,7 @@ class NafahatBubbleService : Service() {
         private const val KEY_EVENING_ENABLED = "evening_azkar_enabled"
         private const val KEY_LAST_MORNING_DAY = "last_morning_azkar_day"
         private const val KEY_LAST_EVENING_DAY = "last_evening_azkar_day"
+        private const val MORNING_AFTER_FAJR_MINUTES = 15L
 
         private val GOLD = Color.rgb(244, 199, 106)
         private val GOLD_DARK = Color.rgb(157, 112, 30)
@@ -224,6 +225,9 @@ class NafahatBubbleService : Service() {
 
     private fun scheduleNextWakeup() {
         val now = System.currentTimeMillis()
+        normalizeExpiredAzkarAt("Morning", now)
+        normalizeExpiredAzkarAt("Evening", now)
+
         val editor = prefs().edit()
         var regularDue = prefs().getLong(KEY_NEXT_DUE_AT, 0L)
         if (regularDue <= now) {
@@ -259,8 +263,8 @@ class NafahatBubbleService : Service() {
     private fun nextUnshownAzkarAt(category: String, now: Long): Long? {
         if (!azkarEnabled(category)) return null
         val at = azkarAt(category)
-        if (at <= now || dayKey(at) != dayKey(now)) return null
-        return if (lastShownDay(category) == dayKey(now)) null else at
+        if (at <= now) return null
+        return if (lastShownDay(category) == dayKey(at)) null else at
     }
 
     private fun azkarEnabled(category: String): Boolean = when (category) {
@@ -273,14 +277,90 @@ class NafahatBubbleService : Service() {
         else -> prefs().getLong(KEY_EVENING_AT, 0L)
     }
 
+    private fun azkarAtKey(category: String): String =
+        if (category == "Morning") KEY_MORNING_AT else KEY_EVENING_AT
+
     private fun lastShownDay(category: String): String = when (category) {
         "Morning" -> prefs().getString(KEY_LAST_MORNING_DAY, "") ?: ""
         else -> prefs().getString(KEY_LAST_EVENING_DAY, "") ?: ""
     }
 
     private fun markAzkarPromptShown(category: String) {
-        val key = if (category == "Morning") KEY_LAST_MORNING_DAY else KEY_LAST_EVENING_DAY
-        prefs().edit().putString(key, dayKey(System.currentTimeMillis())).apply()
+        val now = System.currentTimeMillis()
+        val shownAt = azkarAt(category).takeIf { it > 0L } ?: now
+        val lastDayKey = if (category == "Morning") {
+            KEY_LAST_MORNING_DAY
+        } else {
+            KEY_LAST_EVENING_DAY
+        }
+        val nextAt = nextAzkarAfter(category, shownAt)
+        prefs().edit()
+            .putString(lastDayKey, dayKey(now))
+            .putLong(azkarAtKey(category), nextAt)
+            .apply()
+    }
+
+    private fun normalizeExpiredAzkarAt(category: String, now: Long) {
+        if (!azkarEnabled(category)) return
+        var at = azkarAt(category)
+        if (at <= 0L) return
+        var changed = false
+        var guard = 0
+        while (at < now && dayKey(at) != dayKey(now) && guard < 40) {
+            val next = nextAzkarAfter(category, at)
+            if (next <= at) break
+            at = next
+            changed = true
+            guard++
+        }
+        if (changed) prefs().edit().putLong(azkarAtKey(category), at).apply()
+    }
+
+    private fun nextAzkarAfter(category: String, currentAt: Long): Long {
+        if (category == "Morning" && isMorningFajrBased(currentAt)) {
+            val nextFajr = nextPrayerAt("Fajr", currentAt)
+            if (nextFajr != null) {
+                return nextFajr + MORNING_AFTER_FAJR_MINUTES * 60_000L
+            }
+        }
+        val calendar = Calendar.getInstance(selectedTimeZone()).apply {
+            timeInMillis = currentAt
+            add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return calendar.timeInMillis
+    }
+
+    private fun isMorningFajrBased(at: Long): Boolean {
+        val fajr = prayerAtOnSameDay("Fajr", at) ?: return false
+        val expected = fajr + MORNING_AFTER_FAJR_MINUTES * 60_000L
+        return abs(expected - at) <= 2 * 60_000L
+    }
+
+    private fun prayerAtOnSameDay(prayer: String, referenceAt: Long): Long? =
+        prayerSchedule()
+            .firstOrNull { (name, at) -> name == prayer && dayKey(at) == dayKey(referenceAt) }
+            ?.second
+
+    private fun nextPrayerAt(prayer: String, after: Long): Long? =
+        prayerSchedule()
+            .asSequence()
+            .filter { (name, at) -> name == prayer && at > after }
+            .map { it.second }
+            .minOrNull()
+
+    private fun prayerSchedule(): List<Pair<String, Long>> = try {
+        val raw = widgetPrefs().getString("prayer_schedule_json", null) ?: return emptyList()
+        val array = JSONArray(raw)
+        buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val name = item.optString("name")
+                val at = item.optLong("at", 0L)
+                if (name.isNotBlank() && at > 0L) add(name to at)
+            }
+        }
+    } catch (_: Exception) {
+        emptyList()
     }
 
     private fun dayKey(at: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
