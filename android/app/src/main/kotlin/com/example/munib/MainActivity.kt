@@ -74,6 +74,12 @@ class MainActivity : FlutterActivity() {
                         refreshNafahatIfRunning()
                         result.success(true)
                     }
+                    "queueAzkarNavigation" -> {
+                        val category = call.argument<String>("category")
+                            ?.takeIf { it == "Morning" || it == "Evening" }
+                        pendingAzkarCategory = category
+                        result.success(category != null)
+                    }
                     "consumePendingAzkarNavigation" -> {
                         val category = pendingAzkarCategory
                         pendingAzkarCategory = null
