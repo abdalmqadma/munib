@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
-import 'package:timezone/timezone.dart' as tz;
 
 import '../../core/app_colors.dart';
 import '../../core/app_strings.dart';
-import '../../data/models/prayer_day.dart';
+import '../../features/prayer_times/domain/prayer_time_calculator.dart';
 import '../providers/prayer_provider.dart';
 
 class MunibUltimateWidget extends StatelessWidget {
@@ -130,74 +128,12 @@ class MunibUltimateWidget extends StatelessWidget {
   }
 
   _LocationPrayer? _nextPrayerForLocation(SavedImsakiaLocation location) {
-    if (location.prayers.isEmpty) return null;
-
-    tz.Location? locationZone;
-    DateTime now;
-    if (location.timezone.trim().isNotEmpty) {
-      try {
-        locationZone = tz.getLocation(location.timezone);
-        now = tz.TZDateTime.now(locationZone);
-      } catch (_) {
-        now = DateTime.now();
-      }
-    } else {
-      now = DateTime.now();
-    }
-
-    PrayerDay? findDay(DateTime date) {
-      final key = intl.DateFormat('yyyy-MM-dd').format(date);
-      for (final day in location.prayers) {
-        if (day.date == key) return day;
-      }
-      return null;
-    }
-
-    DateTime parse(String raw, String prayerName, DateTime date) {
-      final parsed = intl.DateFormat('HH:mm').parse(raw.trim());
-      var hour = parsed.hour;
-      if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) {
-        hour += 12;
-      }
-      if (prayerName == 'Dhuhr' && hour < 10) hour += 12;
-      final activeZone = locationZone;
-      if (activeZone != null) {
-        return tz.TZDateTime(
-          activeZone,
-          date.year,
-          date.month,
-          date.day,
-          hour,
-          parsed.minute,
-        );
-      }
-      return DateTime(date.year, date.month, date.day, hour, parsed.minute);
-    }
-
-    final today = findDay(now);
-    if (today != null) {
-      final prayers = <String, String>{
-        'Fajr': today.fajr,
-        'Dhuhr': today.dhuhr,
-        'Asr': today.asr,
-        'Maghrib': today.maghrib,
-        'Isha': today.isha,
-      };
-      for (final entry in prayers.entries) {
-        try {
-          if (parse(entry.value, entry.key, now).isAfter(now)) {
-            return _LocationPrayer(entry.key, entry.value);
-          }
-        } catch (_) {}
-      }
-    }
-
-    final tomorrow = now.add(const Duration(days: 1));
-    final tomorrowDay = findDay(tomorrow);
-    if (tomorrowDay != null) {
-      return _LocationPrayer('Fajr', tomorrowDay.fajr);
-    }
-    return null;
+    final next = PrayerTimeCalculator.nextPrayer(
+      days: location.prayers,
+      timezone: location.timezone,
+    );
+    if (next == null) return null;
+    return _LocationPrayer(next.name, next.rawTime);
   }
 
   IconData _iconForPrayer(String prayer) {
