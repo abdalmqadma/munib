@@ -74,6 +74,8 @@ class SavedImsakiaLocation {
 class PrayerProvider with ChangeNotifier {
   static const _savedLocationsKey = 'savedImsakiaLocationsV1';
   static const _activeLocationKey = 'activeImsakiaLocationId';
+  static const _morningAzkarMinuteKey = 'morningAzkarMinuteOfDay';
+  static const _eveningAzkarMinuteKey = 'eveningAzkarMinuteOfDay';
   static const notificationPrayers = <String>[
     'Fajr',
     'Dhuhr',
@@ -99,6 +101,9 @@ class PrayerProvider with ChangeNotifier {
     for (final prayer in notificationPrayers)
       prayer: NotificationService.defaultReminderMinutes,
   };
+  int? _morningAzkarMinuteOfDay;
+  int _eveningAzkarMinuteOfDay =
+      NotificationService.defaultEveningAzkarMinuteOfDay;
 
   bool prayerNotif = true;
   bool reminderNotif = true;
@@ -119,6 +124,8 @@ class PrayerProvider with ChangeNotifier {
   String? get activeLocationId => _activeLocationId;
   String get activeTimezone => _activeTimezone;
   DateTime get currentLocationTime => _nowForActiveLocation();
+  int? get morningAzkarMinuteOfDay => _morningAzkarMinuteOfDay;
+  int get eveningAzkarMinuteOfDay => _eveningAzkarMinuteOfDay;
   Set<String> get enabledNotificationPrayers =>
       _enabledNotificationPrayers.entries
           .where((entry) => entry.value)
@@ -183,6 +190,16 @@ class PrayerProvider with ChangeNotifier {
         : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
+
+    final savedMorning = prefs.getInt(_morningAzkarMinuteKey);
+    _morningAzkarMinuteOfDay = savedMorning == null
+        ? null
+        : savedMorning.clamp(0, 1439).toInt();
+    _eveningAzkarMinuteOfDay =
+        (prefs.getInt(_eveningAzkarMinuteKey) ??
+                NotificationService.defaultEveningAzkarMinuteOfDay)
+            .clamp(0, 1439)
+            .toInt();
 
     for (final prayer in notificationPrayers) {
       _enabledNotificationPrayers[prayer] =
@@ -487,6 +504,28 @@ class PrayerProvider with ChangeNotifier {
     return true;
   }
 
+  Future<void> setMorningAzkarMinuteOfDay(int? minuteOfDay) async {
+    if (minuteOfDay != null && (minuteOfDay < 0 || minuteOfDay > 1439)) return;
+    _morningAzkarMinuteOfDay = minuteOfDay;
+    final prefs = await SharedPreferences.getInstance();
+    if (minuteOfDay == null) {
+      await prefs.remove(_morningAzkarMinuteKey);
+    } else {
+      await prefs.setInt(_morningAzkarMinuteKey, minuteOfDay);
+    }
+    await _syncNotifications();
+    notifyListeners();
+  }
+
+  Future<void> setEveningAzkarMinuteOfDay(int minuteOfDay) async {
+    if (minuteOfDay < 0 || minuteOfDay > 1439) return;
+    _eveningAzkarMinuteOfDay = minuteOfDay;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_eveningAzkarMinuteKey, minuteOfDay);
+    await _syncNotifications();
+    notifyListeners();
+  }
+
   Future<void> setSilentMode(bool value) async {
     silentMode = value;
     final prefs = await SharedPreferences.getInstance();
@@ -590,6 +629,8 @@ class PrayerProvider with ChangeNotifier {
         timezone: _activeTimezone,
         enabledPrayers: enabledNotificationPrayers,
         reminderMinutes: Map.unmodifiable(_reminderMinutes),
+        morningAzkarMinuteOfDay: _morningAzkarMinuteOfDay,
+        eveningAzkarMinuteOfDay: _eveningAzkarMinuteOfDay,
       );
 
   Future<void> _syncNotifications() =>
