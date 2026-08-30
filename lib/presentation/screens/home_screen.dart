@@ -6,6 +6,7 @@ import '../../core/app_strings.dart';
 import '../../data/models/prayer_day.dart';
 import '../../data/services/ai_service.dart';
 import '../../data/services/location_service.dart';
+import '../../data/services/nafahat_bridge_service.dart';
 import '../providers/prayer_provider.dart';
 import '../widgets/munib_ultimate_widget.dart';
 import '../widgets/prayer_grid_item.dart';
@@ -17,25 +18,52 @@ import 'widget_preview_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final int initialIndex;
-  const HomeScreen({super.key, this.initialIndex = 0});
+  final String initialAzkarCategory;
+
+  const HomeScreen({
+    super.key,
+    this.initialIndex = 0,
+    this.initialAzkarCategory = 'Morning',
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static const _nafahatBridge = NafahatBridgeService();
+
   late int _currentIndex;
   late final PageController _pageController;
+  late String _azkarCategory;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _currentIndex = widget.initialIndex.clamp(0, 3);
+    _azkarCategory = widget.initialAzkarCategory;
     _pageController = PageController(initialPage: _currentIndex);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeNafahatNavigation());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _consumeNafahatNavigation();
+    }
+  }
+
+  Future<void> _consumeNafahatNavigation() async {
+    final category = await _nafahatBridge.consumePendingAzkarNavigation();
+    if (!mounted || category == null) return;
+    setState(() => _azkarCategory = category);
+    _goTo(1);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pageController.dispose();
     super.dispose();
   }
@@ -53,7 +81,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final screens = <Widget>[
       const HomeContent(),
-      const AzkarScreen(),
+      AzkarScreen(
+        key: ValueKey('azkar-$_azkarCategory'),
+        initialCategoryKey: _azkarCategory,
+      ),
       const WidgetPreviewScreen(),
       const SettingsScreen(),
     ];
@@ -99,8 +130,11 @@ class HomeContent extends StatefulWidget {
 }
 
 class _HomeContentState extends State<HomeContent> {
+  final _locationService = LocationService();
   bool _isAutoFetching = false;
   String? _locationName;
+
+  bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
   @override
   void initState() {
@@ -118,26 +152,128 @@ class _HomeContentState extends State<HomeContent> {
       return;
     }
 
-    final locationService = LocationService();
-    if (!await locationService.hasGrantedPermission()) return;
+    if (!await _locationService.hasGrantedPermission()) return;
 
     try {
       final location =
-          await locationService.getCurrentLocation(requestPermission: false);
+          await _locationService.getCurrentLocation(requestPermission: false);
       if (!mounted) return;
       setState(() => _locationName = location.city);
       await provider.updateSetting('currentCity', location.city);
     } catch (_) {}
   }
 
+  Future<bool> _ensureLocationAccess() async {
+    var state = await _locationService.accessState();
+    if (state == MunibLocationAccess.granted) return true;
+
+    if (state == MunibLocationAccess.serviceDisabled) {
+      if (!mounted) return false;
+      final openSettings = await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(_isArabic ? 'الموقع غير مفعّل' : 'Location is off'),
+              content: Text(
+                _isArabic
+                    ? 'فعّل خدمة الموقع حتى يتمكن منيب من جلب مواقيت الصلاة لمكانك.'
+                    : 'Turn on location services so Munib can load prayer times for your area.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: Text(_isArabic ? 'إلغاء' : 'Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(_isArabic ? 'فتح إعدادات الموقع' : 'Open location settings'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (openSettings) await _locationService.openLocationSettings();
+      return false;
+    }
+
+    if (state == MunibLocationAccess.deniedForever) {
+      return _showPermanentPermissionDialog();
+    }
+
+    if (!mounted) return false;
+    final shouldRequest = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            icon: const Icon(Icons.my_location_rounded),
+            title: Text(_isArabic ? 'السماح بالموقع' : 'Allow location access'),
+            content: Text(
+              _isArabic
+                  ? 'يحتاج منيب موقعك فقط لحساب مواقيت الصلاة الخاصة بمنطقتك. اضغط تفعيل الموقع للمتابعة.'
+                  : 'Munib uses your location only to calculate prayer times for your area. Allow access to continue.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(_isArabic ? 'ليس الآن' : 'Not now'),
+              ),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(context, true),
+                icon: const Icon(Icons.location_on_rounded),
+                label: Text(_isArabic ? 'تفعيل الموقع والمتابعة' : 'Enable location and continue'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!shouldRequest) return false;
+
+    state = await _locationService.requestAccess();
+    if (state == MunibLocationAccess.granted) return true;
+    if (state == MunibLocationAccess.deniedForever) {
+      return _showPermanentPermissionDialog();
+    }
+    return false;
+  }
+
+  Future<bool> _showPermanentPermissionDialog() async {
+    if (!mounted) return false;
+    final openSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(_isArabic ? 'صلاحية الموقع موقوفة' : 'Location permission blocked'),
+            content: Text(
+              _isArabic
+                  ? 'تم منع صلاحية الموقع من النظام. افتح إعدادات منيب وفعّل الموقع ثم أعد المحاولة.'
+                  : 'Location permission is blocked by Android. Open Munib settings, allow location, then try again.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(_isArabic ? 'إلغاء' : 'Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(_isArabic ? 'فتح الإعدادات' : 'Open settings'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (openSettings) await _locationService.openAppSettings();
+    return false;
+  }
+
   Future<void> _fetchByLocation() async {
     if (_isAutoFetching) return;
+    if (!await _ensureLocationAccess()) return;
+    if (!mounted) return;
+
     setState(() => _isAutoFetching = true);
     final provider = context.read<PrayerProvider>();
 
     try {
       final location =
-          await LocationService().getCurrentLocation(requestPermission: true);
+          await _locationService.getCurrentLocation(requestPermission: false);
       if (mounted) setState(() => _locationName = location.city);
 
       final result = await AIService().fetchPrayerTimesForLocation(
@@ -162,13 +298,9 @@ class _HomeContentState extends State<HomeContent> {
       );
     } catch (e) {
       if (!mounted) return;
-      final message = e.toString().contains('denied_forever')
-          ? context.tr('locationPermissionForever')
-          : e.toString().contains('service_disabled')
-              ? context.tr('locationServiceDisabled')
-              : e.toString().contains('permission_denied')
-                  ? context.tr('locationPermissionDenied')
-                  : context.tr('fetchFailed');
+      final message = e.toString().contains('service_disabled')
+          ? context.tr('locationServiceDisabled')
+          : context.tr('fetchFailed');
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     } finally {
