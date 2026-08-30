@@ -92,7 +92,10 @@ class MunibUltimateWidget extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               ...locations.map((location) {
-                final next = _nextPrayerForLocation(location);
+                final next = PrayerTimeCalculator.nextPrayer(
+                  days: location.prayers,
+                  timezone: location.timezone,
+                );
                 if (next == null) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.symmetric(vertical: 5),
@@ -109,7 +112,7 @@ class MunibUltimateWidget extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        provider.formatPrayerTime(next.time),
+                        provider.formatPrayerTime(next.rawTime),
                         textDirection: TextDirection.ltr,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
@@ -125,15 +128,6 @@ class MunibUltimateWidget extends StatelessWidget {
         ),
       );
     });
-  }
-
-  _LocationPrayer? _nextPrayerForLocation(SavedImsakiaLocation location) {
-    final next = PrayerTimeCalculator.nextPrayer(
-      days: location.prayers,
-      timezone: location.timezone,
-    );
-    if (next == null) return null;
-    return _LocationPrayer(next.name, next.rawTime);
   }
 
   IconData _iconForPrayer(String prayer) {
@@ -171,11 +165,4 @@ class MunibUltimateWidget extends StatelessWidget {
         return prayer;
     }
   }
-}
-
-class _LocationPrayer {
-  final String name;
-  final String time;
-
-  const _LocationPrayer(this.name, this.time);
 }
