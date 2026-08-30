@@ -74,6 +74,13 @@ class SavedImsakiaLocation {
 class PrayerProvider with ChangeNotifier {
   static const _savedLocationsKey = 'savedImsakiaLocationsV1';
   static const _activeLocationKey = 'activeImsakiaLocationId';
+  static const notificationPrayers = <String>[
+    'Fajr',
+    'Dhuhr',
+    'Asr',
+    'Maghrib',
+    'Isha',
+  ];
 
   List<PrayerDay> _monthlyPrayers = [];
   PrayerDay? _currentDay;
@@ -85,12 +92,20 @@ class PrayerProvider with ChangeNotifier {
   List<SavedImsakiaLocation> _savedLocations = [];
   String? _activeLocationId;
   String _activeTimezone = '';
+  final Map<String, bool> _enabledNotificationPrayers = {
+    for (final prayer in notificationPrayers) prayer: true,
+  };
+  final Map<String, int> _reminderMinutes = {
+    for (final prayer in notificationPrayers)
+      prayer: NotificationService.defaultReminderMinutes,
+  };
 
   bool prayerNotif = true;
   bool reminderNotif = true;
-  bool azkarNotif = false;
+  bool morningAzkarNotif = false;
+  bool eveningAzkarNotif = false;
   bool silentMode = false;
-  String adhanVoice = 'Meccan';
+  String adhanVoice = 'Madinah';
   String currentCity = 'غير محدد';
   String language = 'العربية';
   bool isDarkMode = true;
@@ -104,6 +119,11 @@ class PrayerProvider with ChangeNotifier {
   String? get activeLocationId => _activeLocationId;
   String get activeTimezone => _activeTimezone;
   DateTime get currentLocationTime => _nowForActiveLocation();
+  Set<String> get enabledNotificationPrayers =>
+      _enabledNotificationPrayers.entries
+          .where((entry) => entry.value)
+          .map((entry) => entry.key)
+          .toSet();
 
   String get languageCode => language == 'English' ? 'en' : 'ar';
   Locale get locale => Locale(languageCode);
@@ -148,14 +168,30 @@ class PrayerProvider with ChangeNotifier {
   void _readSettings(SharedPreferences prefs) {
     prayerNotif = prefs.getBool('prayerNotif') ?? true;
     reminderNotif = prefs.getBool('reminderNotif') ?? true;
-    azkarNotif = prefs.getBool('azkarNotif') ?? false;
+    final legacyAzkar = prefs.getBool('azkarNotif') ?? false;
+    morningAzkarNotif = prefs.getBool('morningAzkarNotif') ?? legacyAzkar;
+    eveningAzkarNotif = prefs.getBool('eveningAzkarNotif') ?? legacyAzkar;
     silentMode = prefs.getBool('silentMode') ?? false;
-    adhanVoice = prefs.getString('adhanVoice') ?? 'Meccan';
+    final savedVoice = prefs.getString('adhanVoice');
+    adhanVoice = savedVoice == 'Meccan' || savedVoice == 'None'
+        ? savedVoice!
+        : 'Madinah';
     currentCity = prefs.getString('currentCity') ?? 'غير محدد';
     final savedLanguage = prefs.getString('language') ?? 'ar';
-    language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
+    language = savedLanguage == 'en' || savedLanguage == 'English'
+        ? 'English'
+        : 'العربية';
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
+
+    for (final prayer in notificationPrayers) {
+      _enabledNotificationPrayers[prayer] =
+          prefs.getBool('prayerNotif_$prayer') ?? true;
+      _reminderMinutes[prayer] =
+          (prefs.getInt('prayerReminderMinutes_$prayer') ??
+                  NotificationService.defaultReminderMinutes)
+              .clamp(1, 1440);
+    }
   }
 
   void _readSavedLocations(SharedPreferences prefs) {
@@ -183,11 +219,10 @@ class PrayerProvider with ChangeNotifier {
       timezone: _activeTimezone,
     );
     _updateCurrentStatus(forceWidgetUpdate: true);
+    await _syncNotifications();
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
-    // When the current schedule belongs to a saved location, keep that saved
-    // copy in sync. Otherwise a restart would restore the older schedule.
     final activeId = _activeLocationId;
     if (activeId != null) {
       final index = _savedLocations.indexWhere((e) => e.id == activeId);
@@ -211,9 +246,7 @@ class PrayerProvider with ChangeNotifier {
       timezone: _activeTimezone,
     );
     _updateCurrentStatus(forceWidgetUpdate: true);
-    if (_currentDay != null && prayerNotif) {
-      NotificationService.scheduleDailyPrayers(_currentDay!);
-    }
+    await _syncNotifications();
     notifyListeners();
   }
 
@@ -247,8 +280,6 @@ class PrayerProvider with ChangeNotifier {
       _savedLocations.add(item);
     }
 
-    // The first saved location remains the primary source of truth. Users can
-    // reorder locations explicitly from Imsakia settings.
     await _activateLocation(_savedLocations.first, persistLocations: true);
   }
 
@@ -327,6 +358,7 @@ class PrayerProvider with ChangeNotifier {
       languageCode: languageCode,
       use24HourFormat: use24HourFormat,
     );
+    await _syncNotifications();
     notifyListeners();
   }
 
@@ -353,6 +385,7 @@ class PrayerProvider with ChangeNotifier {
       use24HourFormat: use24HourFormat,
     );
     _updateCurrentStatus(forceWidgetUpdate: true);
+    await _syncNotifications();
     notifyListeners();
   }
 
@@ -386,6 +419,114 @@ class PrayerProvider with ChangeNotifier {
     }
   }
 
+  bool isPrayerNotificationEnabled(String prayer) =>
+      _enabledNotificationPrayers[prayer] ?? false;
+
+  int reminderMinutesFor(String prayer) =>
+      _reminderMinutes[prayer] ?? NotificationService.defaultReminderMinutes;
+
+  bool reminderMinutesConflict(String prayer, int minutes) =>
+      NotificationService.hasReminderConflict(
+        days: _monthlyPrayers,
+        timezone: _activeTimezone,
+        prayer: prayer,
+        minutes: minutes,
+      );
+
+  Future<NotificationPermissionState> requestNotificationPermissions() async {
+    final state = await NotificationService.requestPermissions();
+    if (state.notificationsAllowed) await _syncNotifications();
+    return state;
+  }
+
+  Future<bool> setPrayerNotificationsEnabled(bool value) async {
+    if (value) {
+      final permission = await NotificationService.requestPermissions();
+      if (!permission.notificationsAllowed) return false;
+    }
+    prayerNotif = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('prayerNotif', value);
+    await _syncNotifications();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> setReminderNotificationsEnabled(bool value) async {
+    reminderNotif = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('reminderNotif', value);
+    await _syncNotifications();
+    notifyListeners();
+  }
+
+  Future<bool> setMorningAzkarNotificationsEnabled(bool value) async {
+    if (value) {
+      final permission = await NotificationService.requestPermissions();
+      if (!permission.notificationsAllowed) return false;
+    }
+    morningAzkarNotif = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('morningAzkarNotif', value);
+    await _syncNotifications();
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> setEveningAzkarNotificationsEnabled(bool value) async {
+    if (value) {
+      final permission = await NotificationService.requestPermissions();
+      if (!permission.notificationsAllowed) return false;
+    }
+    eveningAzkarNotif = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('eveningAzkarNotif', value);
+    await _syncNotifications();
+    notifyListeners();
+    return true;
+  }
+
+  Future<void> setSilentMode(bool value) async {
+    silentMode = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('silentMode', value);
+    await _syncNotifications();
+    notifyListeners();
+  }
+
+  Future<void> setAdhanVoice(String value) async {
+    final normalized = value == 'Meccan' || value == 'None' ? value : 'Madinah';
+    adhanVoice = normalized;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('adhanVoice', normalized);
+    await _syncNotifications();
+    notifyListeners();
+  }
+
+  Future<void> setPrayerNotificationEnabled(String prayer, bool value) async {
+    if (prayer !in notificationPrayers) return;
+    _enabledNotificationPrayers[prayer] = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('prayerNotif_$prayer', value);
+    await _syncNotifications();
+    notifyListeners();
+  }
+
+  Future<bool> setPrayerReminderMinutes(String prayer, int minutes) async {
+    if (prayer !in notificationPrayers ||
+        minutes < 1 ||
+        minutes > 1440 ||
+        reminderMinutesConflict(prayer, minutes)) {
+      return false;
+    }
+    _reminderMinutes[prayer] = minutes;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('prayerReminderMinutes_$prayer', minutes);
+    await _syncNotifications();
+    notifyListeners();
+    return true;
+  }
+
   Future<void> updateSetting(String key, dynamic value) async {
     if (key == 'language' && value is String) {
       await setLanguage(value);
@@ -399,17 +540,36 @@ class PrayerProvider with ChangeNotifier {
       await setUse24HourFormat(value);
       return;
     }
+    if (key == 'prayerNotif' && value is bool) {
+      await setPrayerNotificationsEnabled(value);
+      return;
+    }
+    if (key == 'reminderNotif' && value is bool) {
+      await setReminderNotificationsEnabled(value);
+      return;
+    }
+    if (key == 'morningAzkarNotif' && value is bool) {
+      await setMorningAzkarNotificationsEnabled(value);
+      return;
+    }
+    if (key == 'eveningAzkarNotif' && value is bool) {
+      await setEveningAzkarNotificationsEnabled(value);
+      return;
+    }
+    if (key == 'silentMode' && value is bool) {
+      await setSilentMode(value);
+      return;
+    }
+    if (key == 'adhanVoice' && value is String) {
+      await setAdhanVoice(value);
+      return;
+    }
 
     final prefs = await SharedPreferences.getInstance();
     if (value is bool) {
       await prefs.setBool(key, value);
-      if (key == 'prayerNotif') prayerNotif = value;
-      if (key == 'reminderNotif') reminderNotif = value;
-      if (key == 'azkarNotif') azkarNotif = value;
-      if (key == 'silentMode') silentMode = value;
     } else if (value is String) {
       await prefs.setString(key, value);
-      if (key == 'adhanVoice') adhanVoice = value;
       if (key == 'currentCity') {
         currentCity = value;
         await WidgetService.saveLocation(value);
@@ -417,6 +577,22 @@ class PrayerProvider with ChangeNotifier {
     }
     notifyListeners();
   }
+
+  NotificationScheduleConfig get _notificationConfig => NotificationScheduleConfig(
+        prayerNotificationsEnabled: prayerNotif,
+        remindersEnabled: reminderNotif,
+        morningAzkarEnabled: morningAzkarNotif,
+        eveningAzkarEnabled: eveningAzkarNotif,
+        silent: silentMode,
+        adhanVoice: adhanVoice,
+        languageCode: languageCode,
+        timezone: _activeTimezone,
+        enabledPrayers: enabledNotificationPrayers,
+        reminderMinutes: Map.unmodifiable(_reminderMinutes),
+      );
+
+  Future<void> _syncNotifications() =>
+      NotificationService.syncSchedule(_monthlyPrayers, _notificationConfig);
 
   DateTime _nowForActiveLocation() {
     if (_activeTimezone.trim().isNotEmpty) {
@@ -465,7 +641,8 @@ class PrayerProvider with ChangeNotifier {
     return difference.isNegative ? Duration.zero : difference;
   }
 
-  String formattedTimeUntilPrayer(String prayerName) => _formatDuration(timeUntilPrayer(prayerName));
+  String formattedTimeUntilPrayer(String prayerName) =>
+      _formatDuration(timeUntilPrayer(prayerName));
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -497,7 +674,8 @@ class PrayerProvider with ChangeNotifier {
     _calculateNextPrayer(now);
     notifyListeners();
 
-    final widgetStateKey = '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
+    final widgetStateKey =
+        '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
     if (forceWidgetUpdate || widgetStateKey != _lastWidgetStateKey) {
       _lastWidgetStateKey = widgetStateKey;
       unawaited(WidgetService.updateWidget(
@@ -517,8 +695,6 @@ class PrayerProvider with ChangeNotifier {
     final day = _currentDay;
     if (day == null) return;
 
-    // Sunrise remains visible in the daily timetable but is deliberately not
-    // treated as a prayer for the next-prayer countdown.
     final prayers = <String, String>{
       'Fajr': day.fajr,
       'Dhuhr': day.dhuhr,
@@ -542,14 +718,16 @@ class PrayerProvider with ChangeNotifier {
       _nextPrayerName = 'Fajr';
       final tomorrowReference = now.add(const Duration(days: 1));
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
-      final tomorrowData = _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
+      final tomorrowData =
+          _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
       if (tomorrowData == null) {
         _nextPrayerName = '';
         _nextPrayerTime = null;
         _timeLeft = Duration.zero;
         return;
       }
-      final tomorrowFajr = _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
+      final tomorrowFajr =
+          _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
       _nextPrayerTime = tomorrowFajr;
       _timeLeft = tomorrowFajr.difference(now);
       return;
