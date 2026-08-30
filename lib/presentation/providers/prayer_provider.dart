@@ -190,7 +190,8 @@ class PrayerProvider with ChangeNotifier {
       _reminderMinutes[prayer] =
           (prefs.getInt('prayerReminderMinutes_$prayer') ??
                   NotificationService.defaultReminderMinutes)
-              .clamp(1, 1440);
+              .clamp(1, 1440)
+              .toInt();
     }
   }
 
@@ -504,7 +505,7 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setPrayerNotificationEnabled(String prayer, bool value) async {
-    if (prayer !in notificationPrayers) return;
+    if (!notificationPrayers.contains(prayer)) return;
     _enabledNotificationPrayers[prayer] = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('prayerNotif_$prayer', value);
@@ -513,7 +514,7 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<bool> setPrayerReminderMinutes(String prayer, int minutes) async {
-    if (prayer !in notificationPrayers ||
+    if (!notificationPrayers.contains(prayer) ||
         minutes < 1 ||
         minutes > 1440 ||
         reminderMinutesConflict(prayer, minutes)) {
