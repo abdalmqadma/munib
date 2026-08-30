@@ -7,6 +7,8 @@ import '../../core/app_strings.dart';
 import '../../data/services/azkar_data.dart';
 import '../providers/prayer_provider.dart';
 
+typedef AsyncCountChanged = Future<void> Function(int count);
+
 class AzkarScreen extends StatelessWidget {
   const AzkarScreen({super.key});
 
@@ -227,7 +229,7 @@ class AzkarCard extends StatefulWidget {
   final Map<String, dynamic> azkar;
   final bool isEn;
   final int initialCount;
-  final ValueChanged<int> onCountChanged;
+  final AsyncCountChanged onCountChanged;
   final VoidCallback onCompleted;
 
   const AzkarCard({
