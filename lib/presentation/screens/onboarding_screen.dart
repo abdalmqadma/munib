@@ -53,11 +53,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             : 'تابع الصلاة القادمة والعد التنازلي بسهولة من التطبيق والويدجت.',
       ),
       _OnboardingPage(
-        icon: Icons.self_improvement_rounded,
-        title: isEn ? 'Learn and improve' : 'تعلّم وتحسّن',
+        icon: Icons.auto_awesome_rounded,
+        title: isEn ? 'A calmer daily routine' : 'روتين يومي أبسط',
         body: isEn
-            ? 'Use reminders, adhkar, and Prayer Coach to build a consistent routine.'
-            : 'استخدم التنبيهات والأذكار ومدرب الصلاة لبناء روتين ثابت.',
+            ? 'Use adhkar and Nafahat alongside your prayer times to keep useful reminders close throughout the day.'
+            : 'استخدم الأذكار ونفحات بجانب مواقيت الصلاة لتبقى التذكيرات المفيدة قريبة منك خلال اليوم.',
       ),
     ];
 
