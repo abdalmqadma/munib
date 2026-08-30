@@ -43,3 +43,7 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      - name: Compile Android Kotlin
+        working-directory: android
+        run: ./gradlew :app:compileDebugKotlin --stacktrace
