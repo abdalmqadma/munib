@@ -29,66 +29,87 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
-                    "startNafahat" -> {
-                        if (!canDrawOverlays()) {
-                            result.error("overlay_permission", "Overlay permission is required", null)
-                            return@setMethodCallHandler
-                        }
-                        val intent = Intent(this, NafahatBubbleService::class.java)
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
-                        else startService(intent)
-                        result.success(true)
-                    }
+                    "startNafahat" -> startNafahat(result)
                     "stopNafahat" -> {
                         stopService(Intent(this, NafahatBubbleService::class.java))
                         result.success(true)
                     }
                     "isNafahatRunning" -> result.success(NafahatBubbleService.isRunning)
-                    "getNafahatSettings" -> {
-                        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
-                        result.success(
-                            mapOf(
-                                "enabledKinds" to (prefs.getStringSet("enabled_kinds", null)
-                                    ?: setOf("آية", "حديث", "ذكر", "أثر طيب")).toList(),
-                                "intervalMinutes" to prefs.getInt("interval_minutes", 30),
-                                "visibleSeconds" to prefs.getInt("visible_seconds", 45),
-                                "quietMode" to prefs.getBoolean("quiet_mode", false),
-                                "contextualMode" to prefs.getBoolean("contextual_mode", true),
-                            ),
-                        )
-                    }
+                    "getNafahatSettings" -> result.success(readNafahatSettings())
                     "setNafahatSettings" -> {
-                        val kinds = call.argument<List<String>>("enabledKinds")
-                            ?.filter { it in setOf("آية", "حديث", "ذكر", "أثر طيب") }
-                            ?.toSet()
-                            ?.takeIf { it.isNotEmpty() }
-                            ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
-                        val interval = (call.argument<Int>("intervalMinutes") ?: 30).coerceIn(10, 180)
-                        val visibleSeconds = (call.argument<Int>("visibleSeconds") ?: 45).coerceIn(15, 180)
-                        val quietMode = call.argument<Boolean>("quietMode") ?: false
-                        val contextualMode = call.argument<Boolean>("contextualMode") ?: true
-
+                        saveNafahatSettings(
+                            enabledKinds = call.argument<List<String>>("enabledKinds"),
+                            intervalMinutes = call.argument<Int>("intervalMinutes"),
+                            contextualMode = call.argument<Boolean>("contextualMode"),
+                        )
+                        refreshNafahatIfRunning()
+                        result.success(true)
+                    }
+                    "setNafahatAppearance" -> {
+                        val themeMode = call.argument<String>("themeMode")
+                            ?.takeIf { it in setOf("system", "light", "dark") }
+                            ?: "system"
                         getSharedPreferences(prefsName, MODE_PRIVATE)
                             .edit()
-                            .putStringSet("enabled_kinds", kinds)
-                            .putInt("interval_minutes", interval)
-                            .putInt("visible_seconds", visibleSeconds)
-                            .putBoolean("quiet_mode", quietMode)
-                            .putBoolean("contextual_mode", contextualMode)
+                            .putString("theme_mode", themeMode)
                             .apply()
-
-                        if (NafahatBubbleService.isRunning) {
-                            val refresh = Intent(this, NafahatBubbleService::class.java).apply {
-                                action = NafahatBubbleService.ACTION_REFRESH_SETTINGS
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(refresh)
-                            else startService(refresh)
-                        }
+                        refreshNafahatIfRunning()
                         result.success(true)
                     }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun startNafahat(result: MethodChannel.Result) {
+        if (!canDrawOverlays()) {
+            result.error("overlay_permission", "Overlay permission is required", null)
+            return
+        }
+        val intent = Intent(this, NafahatBubbleService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
+        else startService(intent)
+        result.success(true)
+    }
+
+    private fun readNafahatSettings(): Map<String, Any> {
+        val prefs = getSharedPreferences(prefsName, MODE_PRIVATE)
+        return mapOf(
+            "enabledKinds" to (prefs.getStringSet("enabled_kinds", null)
+                ?: setOf("آية", "حديث", "ذكر", "أثر طيب")).toList(),
+            "intervalMinutes" to prefs.getInt("interval_minutes", 30),
+            "contextualMode" to prefs.getBoolean("contextual_mode", true),
+            "themeMode" to (prefs.getString("theme_mode", "system") ?: "system"),
+        )
+    }
+
+    private fun saveNafahatSettings(
+        enabledKinds: List<String>?,
+        intervalMinutes: Int?,
+        contextualMode: Boolean?,
+    ) {
+        val kinds = enabledKinds
+            ?.filter { it in setOf("آية", "حديث", "ذكر", "أثر طيب") }
+            ?.toSet()
+            ?.takeIf { it.isNotEmpty() }
+            ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
+        val interval = (intervalMinutes ?: 30).coerceIn(10, 180)
+
+        getSharedPreferences(prefsName, MODE_PRIVATE)
+            .edit()
+            .putStringSet("enabled_kinds", kinds)
+            .putInt("interval_minutes", interval)
+            .putBoolean("contextual_mode", contextualMode ?: true)
+            .apply()
+    }
+
+    private fun refreshNafahatIfRunning() {
+        if (!NafahatBubbleService.isRunning) return
+        val refresh = Intent(this, NafahatBubbleService::class.java).apply {
+            action = NafahatBubbleService.ACTION_REFRESH_SETTINGS
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(refresh)
+        else startService(refresh)
     }
 
     private fun canDrawOverlays(): Boolean =
