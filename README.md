@@ -1,6 +1,6 @@
 # Munib | منيب
 
-Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, notifications, home screen widgets and monthly prayer schedule import in one focused experience that supports both Arabic and English.
+Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, Nafahat, notifications and home screen widgets in one focused experience that supports both Arabic and English.
 
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com)
@@ -19,9 +19,9 @@ Current features include:
 
 - Prayer times based on the selected location
 - The next prayer time and a live countdown
-- Importing monthly prayer schedules from images with OCR
-- A review step for OCR results that may need correction
-- Adhkar and Nafahat content
+- Multiple saved prayer locations
+- Adhkar with daily progress
+- Nafahat content and contextual reminders
 - Prayer notifications and configurable settings
 - Android home screen widgets in multiple sizes
 - Firebase authentication and user profiles
@@ -32,8 +32,7 @@ Current features include:
 - Flutter and Dart
 - Provider for state management
 - Firebase Authentication, Firestore and Storage
-- REST APIs for prayer times and OCR processing
-- Google ML Kit for text recognition
+- REST API for prayer times
 - Hive and Shared Preferences for local data
 - Native Android code for widgets and background functionality
 
@@ -44,7 +43,7 @@ lib/
   core/                  App theme, colors, strings and localization
   data/
     models/              Prayer schedule data models
-    services/            Authentication, location, OCR, notifications and widgets
+    services/            Authentication, location, notifications and widgets
   presentation/
     providers/           Application state
     screens/             Main application screens
@@ -52,7 +51,7 @@ lib/
   main.dart              Application entry point
 ```
 
-Platform specific Android and iOS configuration remains in the standard Flutter directories. Automated Android APK builds are configured in `.github/workflows`.
+Platform specific Android and iOS configuration remains in the standard Flutter directories. GitHub Actions runs code analysis and tests without building APK artifacts.
 
 ## Getting started
 
@@ -78,7 +77,15 @@ For development with your own Firebase project, install the FlutterFire CLI and 
 flutterfire configure
 ```
 
-The OCR feature currently connects to a developer hosted backend and requires a valid Firebase ID token. Contributors who use another backend can update the endpoint and integration in `lib/data/services/ai_service.dart`.
+## Archived Imsakia upload feature
+
+The image/PDF Imsakia upload and OCR feature is intentionally excluded from the MVP so the app does not ship unused OCR dependencies while the extraction backend is not production ready.
+
+The complete implementation is preserved on the branch:
+
+`archive/imsakia-upload-v1`
+
+That branch contains the upload/review screens, OCR service and extraction API integration so the feature can be restored later without rebuilding it from scratch.
 
 ## Development showcase
 
@@ -86,11 +93,11 @@ The latest interface update and eight screen preview are available in this [Muni
 
 ## Roadmap
 
-- Improve OCR accuracy and review handling
 - Expand automated tests
 - Improve accessibility and localization
 - Continue reliability and performance testing
 - Prepare the first stable Android release
+- Reintroduce Imsakia OCR upload when a stable production API is available
 
 ## Contributing
 
