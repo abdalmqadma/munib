@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -90,7 +90,7 @@ class _AzkarListState extends State<AzkarList> {
   bool _loading = true;
   List<_AzkarProgressItem> _items = const [];
 
-  String get _dayKey => DateFormat('yyyy-MM-dd').format(DateTime.now());
+  String get _dayKey => intl.DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   @override
   void initState() {
