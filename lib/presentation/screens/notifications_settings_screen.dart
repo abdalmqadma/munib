@@ -51,25 +51,62 @@ class NotificationsSettingsScreen extends StatelessWidget {
               _switchTile(
                 context,
                 title: isEn ? 'Morning adhkar' : 'أذكار الصباح',
-                subtitle: isEn
-                    ? '15 minutes after Fajr'
-                    : 'بعد الفجر بـ 15 دقيقة',
+                subtitle: provider.morningAzkarMinuteOfDay == null
+                    ? (isEn
+                        ? '15 minutes after Fajr by default'
+                        : 'بعد الفجر بـ 15 دقيقة افتراضيًا')
+                    : _customTimeSubtitle(
+                        context,
+                        provider,
+                        provider.morningAzkarMinuteOfDay!,
+                      ),
                 icon: Icons.wb_sunny_outlined,
                 value: provider.morningAzkarNotif,
                 onChanged: (value) =>
                     _setMorningAzkar(context, provider, value),
+              ),
+              _azkarTimeTile(
+                context,
+                title: isEn ? 'Morning adhkar time' : 'موعد أذكار الصباح',
+                value: provider.morningAzkarMinuteOfDay == null
+                    ? (isEn ? 'After Fajr' : 'بعد الفجر')
+                    : _formatMinuteOfDay(
+                        context,
+                        provider,
+                        provider.morningAzkarMinuteOfDay!,
+                      ),
+                onTap: () => _pickMorningAzkarTime(context, provider),
+                onReset: provider.morningAzkarMinuteOfDay == null
+                    ? null
+                    : () => provider.setMorningAzkarMinuteOfDay(null),
               ),
               const Divider(height: 1),
               _switchTile(
                 context,
                 title: isEn ? 'Evening adhkar' : 'أذكار المساء',
                 subtitle: isEn
-                    ? '15 minutes after Maghrib'
-                    : 'بعد المغرب بـ 15 دقيقة',
+                    ? '5:00 PM by default, customizable'
+                    : 'الساعة 5:00 مساءً افتراضيًا، وقابل للتخصيص',
                 icon: Icons.nights_stay_outlined,
                 value: provider.eveningAzkarNotif,
                 onChanged: (value) =>
                     _setEveningAzkar(context, provider, value),
+              ),
+              _azkarTimeTile(
+                context,
+                title: isEn ? 'Evening adhkar time' : 'موعد أذكار المساء',
+                value: _formatMinuteOfDay(
+                  context,
+                  provider,
+                  provider.eveningAzkarMinuteOfDay,
+                ),
+                onTap: () => _pickEveningAzkarTime(context, provider),
+                onReset: provider.eveningAzkarMinuteOfDay ==
+                        NotificationService.defaultEveningAzkarMinuteOfDay
+                    ? null
+                    : () => provider.setEveningAzkarMinuteOfDay(
+                          NotificationService.defaultEveningAzkarMinuteOfDay,
+                        ),
               ),
               const Divider(height: 1),
               _switchTile(
@@ -202,6 +239,44 @@ class NotificationsSettingsScreen extends StatelessWidget {
     _showPermissionDenied(context, provider.isEnglish);
   }
 
+  Future<void> _pickMorningAzkarTime(
+    BuildContext context,
+    PrayerProvider provider,
+  ) async {
+    final currentMinute = provider.morningAzkarMinuteOfDay;
+    final initial = currentMinute == null
+        ? _fajrTime(provider) ?? const TimeOfDay(hour: 6, minute: 0)
+        : _timeOfDay(currentMinute);
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: provider.isEnglish
+          ? 'Morning adhkar time'
+          : 'موعد أذكار الصباح',
+    );
+    if (selected == null) return;
+    await provider.setMorningAzkarMinuteOfDay(
+      selected.hour * 60 + selected.minute,
+    );
+  }
+
+  Future<void> _pickEveningAzkarTime(
+    BuildContext context,
+    PrayerProvider provider,
+  ) async {
+    final selected = await showTimePicker(
+      context: context,
+      initialTime: _timeOfDay(provider.eveningAzkarMinuteOfDay),
+      helpText: provider.isEnglish
+          ? 'Evening adhkar time'
+          : 'موعد أذكار المساء',
+    );
+    if (selected == null) return;
+    await provider.setEveningAzkarMinuteOfDay(
+      selected.hour * 60 + selected.minute,
+    );
+  }
+
   Widget _prayerTile(
     BuildContext context,
     PrayerProvider provider,
@@ -309,6 +384,38 @@ class NotificationsSettingsScreen extends StatelessWidget {
     );
   }
 
+  Widget _azkarTimeTile(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required VoidCallback onTap,
+    VoidCallback? onReset,
+  }) {
+    final theme = Theme.of(context);
+    return ListTile(
+      dense: true,
+      contentPadding: const EdgeInsetsDirectional.fromSTEB(72, 0, 10, 4),
+      title: Text(title, style: theme.textTheme.bodyMedium),
+      subtitle: Text(value, style: theme.textTheme.bodySmall),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (onReset != null)
+            IconButton(
+              tooltip: 'Reset',
+              onPressed: onReset,
+              icon: const Icon(Icons.restart_alt_rounded),
+            ),
+          IconButton(
+            onPressed: onTap,
+            icon: const Icon(Icons.schedule_rounded),
+          ),
+        ],
+      ),
+      onTap: onTap,
+    );
+  }
+
   Widget _sectionTitle(BuildContext context, String title) => Padding(
         padding: const EdgeInsetsDirectional.only(start: 4, bottom: 10),
         child: Text(title, style: Theme.of(context).textTheme.titleSmall),
@@ -382,6 +489,43 @@ class NotificationsSettingsScreen extends StatelessWidget {
         child: Icon(icon, color: scheme.primary),
       ),
     );
+  }
+
+  String _customTimeSubtitle(
+    BuildContext context,
+    PrayerProvider provider,
+    int minuteOfDay,
+  ) {
+    final formatted = _formatMinuteOfDay(context, provider, minuteOfDay);
+    return provider.isEnglish ? 'Custom: $formatted' : 'مخصص: $formatted';
+  }
+
+  String _formatMinuteOfDay(
+    BuildContext context,
+    PrayerProvider provider,
+    int minuteOfDay,
+  ) {
+    final time = _timeOfDay(minuteOfDay);
+    return MaterialLocalizations.of(context).formatTimeOfDay(
+      time,
+      alwaysUse24HourFormat: provider.use24HourFormat,
+    );
+  }
+
+  TimeOfDay _timeOfDay(int minuteOfDay) {
+    final safe = minuteOfDay.clamp(0, 1439).toInt();
+    return TimeOfDay(hour: safe ~/ 60, minute: safe % 60);
+  }
+
+  TimeOfDay? _fajrTime(PrayerProvider provider) {
+    final raw = provider.currentDay?.fajr.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final match = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(raw);
+    if (match == null) return null;
+    final hour = int.tryParse(match.group(1) ?? '');
+    final minute = int.tryParse(match.group(2) ?? '');
+    if (hour == null || minute == null || hour > 23 || minute > 59) return null;
+    return TimeOfDay(hour: hour, minute: minute);
   }
 
   void _showPermissionDenied(BuildContext context, bool isEn) {
