@@ -9,14 +9,20 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val channelName = "com.example.munib/nafahat"
+    private val nafahatChannelName = "com.example.munib/nafahat"
+    private val adhanChannelName = "com.example.munib/adhan"
     private val prefsName = "nafahat_prefs"
     private var pendingAzkarCategory: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         captureAzkarNavigation(intent)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
+        configureNafahatChannel(flutterEngine)
+        configureAdhanChannel(flutterEngine)
+    }
+
+    private fun configureNafahatChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, nafahatChannelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "canDrawOverlays" -> result.success(canDrawOverlays())
@@ -72,6 +78,58 @@ class MainActivity : FlutterActivity() {
                         val category = pendingAzkarCategory
                         pendingAzkarCategory = null
                         result.success(category)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun configureAdhanChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, adhanChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "prepareAdhanVoice" -> {
+                        val voice = call.argument<String>("voice")
+                        if (voice !in setOf("Madinah", "Meccan")) {
+                            result.error("invalid_voice", "Unsupported adhan voice", null)
+                            return@setMethodCallHandler
+                        }
+                        AdhanPlaybackService.prepareVoice(this, voice!!)
+                        result.success(true)
+                    }
+                    "syncPrayerAlarms" -> {
+                        val language = call.argument<String>("languageCode")
+                            ?.takeIf { it == "en" }
+                            ?: "ar"
+                        val voice = call.argument<String>("voice")
+                            ?.takeIf { it in setOf("Madinah", "Meccan", "None") }
+                            ?: "Madinah"
+                        val silent = call.argument<Boolean>("silent") ?: false
+                        val rawAlarms = call.argument<List<*>>("alarms").orEmpty()
+                        val specs = rawAlarms.mapNotNull { raw ->
+                            val map = raw as? Map<*, *> ?: return@mapNotNull null
+                            val id = (map["id"] as? Number)?.toInt() ?: return@mapNotNull null
+                            val at = (map["at"] as? Number)?.toLong() ?: return@mapNotNull null
+                            val prayer = map["prayer"] as? String ?: return@mapNotNull null
+                            PrayerAlarmSpec(
+                                id = id,
+                                atMillis = at,
+                                prayer = prayer,
+                                languageCode = language,
+                                voice = voice,
+                                silent = silent,
+                            )
+                        }
+                        PrayerAlarmScheduler.sync(this, specs)
+                        if (!silent && voice != "None") {
+                            AdhanPlaybackService.prepareVoice(this, voice)
+                        }
+                        result.success(true)
+                    }
+                    "cancelPrayerAlarms" -> {
+                        PrayerAlarmScheduler.cancelAll(this)
+                        stopService(Intent(this, AdhanPlaybackService::class.java))
+                        result.success(true)
                     }
                     else -> result.notImplemented()
                 }
