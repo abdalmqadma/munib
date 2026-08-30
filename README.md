@@ -1,6 +1,6 @@
 # Munib | منيب
 
-Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, notifications, home screen widgets and monthly prayer schedule import in one focused Arabic experience.
+Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, notifications, home screen widgets and monthly prayer schedule import in one focused experience that supports both Arabic and English.
 
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com)
@@ -13,7 +13,7 @@ Munib is under active development and has not reached its first stable release. 
 
 ## What Munib does
 
-Munib is designed to make daily prayer information easy to reach without turning the experience into a collection of disconnected tools. The application focuses on clear Arabic interfaces, reliable reminders and practical features that are useful throughout the day.
+Munib is designed to make daily prayer information easy to reach without turning the experience into a collection of disconnected tools. The application focuses on clear interfaces in Arabic and English, reliable reminders and practical features that are useful throughout the day.
 
 Current features include:
 
