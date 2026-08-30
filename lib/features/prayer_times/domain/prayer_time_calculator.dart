@@ -1,7 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-import '../../../data/models/prayer_day.dart';
+import '../data/models/prayer_day.dart';
 
 class PrayerMoment {
   final String name;
