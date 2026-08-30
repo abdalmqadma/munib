@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -31,6 +32,8 @@ class NotificationScheduleConfig {
   final String timezone;
   final Set<String> enabledPrayers;
   final Map<String, int> reminderMinutes;
+  final int? morningAzkarMinuteOfDay;
+  final int eveningAzkarMinuteOfDay;
 
   const NotificationScheduleConfig({
     required this.prayerNotificationsEnabled,
@@ -43,12 +46,15 @@ class NotificationScheduleConfig {
     required this.timezone,
     required this.enabledPrayers,
     required this.reminderMinutes,
+    required this.morningAzkarMinuteOfDay,
+    required this.eveningAzkarMinuteOfDay,
   });
 }
 
 class NotificationService {
   static const int defaultReminderMinutes = 15;
-  static const int azkarDelayMinutes = 15;
+  static const int defaultMorningAzkarDelayMinutes = 15;
+  static const int defaultEveningAzkarMinuteOfDay = 17 * 60;
   static const String _managedIdsKey = 'notification_managed_ids_v2';
   static const String _reminderChannelId = 'prayer_reminders_v2';
   static const String _azkarChannelId = 'daily_azkar_v2';
@@ -61,7 +67,6 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static String? _pendingAzkarCategory;
   static bool _initialized = false;
 
   static Future<void> init() async {
@@ -96,17 +101,14 @@ class NotificationService {
   }
 
   static void _captureAzkarPayload(String? payload) {
-    if (payload == 'azkar:Morning') {
-      _pendingAzkarCategory = 'Morning';
-    } else if (payload == 'azkar:Evening') {
-      _pendingAzkarCategory = 'Evening';
+    final category = switch (payload) {
+      'azkar:Morning' => 'Morning',
+      'azkar:Evening' => 'Evening',
+      _ => null,
+    };
+    if (category != null) {
+      unawaited(_nafahatBridge.queueAzkarNavigation(category));
     }
-  }
-
-  static String? consumePendingAzkarCategory() {
-    final category = _pendingAzkarCategory;
-    _pendingAzkarCategory = null;
-    return category;
   }
 
   static Future<NotificationPermissionState> permissionState() async {
@@ -182,12 +184,8 @@ class NotificationService {
     await _cancelManagedNotifications();
 
     final moments = _buildPrayerMoments(days, config.timezone);
-    await _syncNafahatAzkarSchedule(moments, config);
-
-    if (moments.isEmpty) {
-      await _adhanBridge.cancelPrayerAlarms();
-      return;
-    }
+    final azkarMoments = _buildAzkarMoments(days, config);
+    await _syncNafahatAzkarSchedule(azkarMoments, config);
 
     final permission = await permissionState();
     if (!permission.notificationsAllowed) {
@@ -201,6 +199,9 @@ class NotificationService {
     final now = _now(config.timezone);
     final horizon = now.add(Duration(days: Platform.isIOS ? 7 : 31));
     final relevantMoments = moments
+        .where((moment) => moment.at.isAfter(now) && moment.at.isBefore(horizon))
+        .toList(growable: false);
+    final relevantAzkar = azkarMoments
         .where((moment) => moment.at.isAfter(now) && moment.at.isBefore(horizon))
         .toList(growable: false);
 
@@ -238,8 +239,7 @@ class NotificationService {
 
     var reminderId = _reminderBaseId;
     var fallbackPrayerId = _nativeAlarmBaseId;
-    for (var i = 0; i < relevantMoments.length; i++) {
-      final moment = relevantMoments[i];
+    for (final moment in relevantMoments) {
       if (!config.enabledPrayers.contains(moment.name)) continue;
 
       if (config.prayerNotificationsEnabled && !Platform.isAndroid) {
@@ -250,7 +250,8 @@ class NotificationService {
           body: _prayerBody(moment.name, config.languageCode),
           at: moment.at,
           channelId: 'prayer_events_v2',
-          channelName: config.languageCode == 'en' ? 'Prayer times' : 'مواقيت الصلاة',
+          channelName:
+              config.languageCode == 'en' ? 'Prayer times' : 'مواقيت الصلاة',
           silent: config.silent,
           mode: scheduleMode,
         );
@@ -260,25 +261,28 @@ class NotificationService {
       if (!config.prayerNotificationsEnabled || !config.remindersEnabled) {
         continue;
       }
-      final lead = config.reminderMinutes[moment.name] ??
-          defaultReminderMinutes;
+      final lead =
+          config.reminderMinutes[moment.name] ?? defaultReminderMinutes;
       if (lead <= 0) continue;
 
       final reminderAt = moment.at.subtract(Duration(minutes: lead));
       if (!reminderAt.isAfter(now)) continue;
-      if (_conflictsWithPreviousPrayer(relevantMoments, i, reminderAt)) {
+      final fullIndex = moments.indexOf(moment);
+      if (_conflictsWithPreviousPrayer(moments, fullIndex, reminderAt)) {
         continue;
       }
 
       final id = reminderId++;
       await _schedule(
         id: id,
-        title: config.languageCode == 'en' ? 'Prayer reminder' : 'تذكير بالصلاة',
+        title:
+            config.languageCode == 'en' ? 'Prayer reminder' : 'تذكير بالصلاة',
         body: _reminderBody(moment.name, lead, config.languageCode),
         at: reminderAt,
         channelId: _reminderChannelId,
-        channelName:
-            config.languageCode == 'en' ? 'Prayer reminders' : 'تذكيرات الصلاة',
+        channelName: config.languageCode == 'en'
+            ? 'Prayer reminders'
+            : 'تذكيرات الصلاة',
         silent: config.silent,
         mode: scheduleMode,
       );
@@ -286,18 +290,9 @@ class NotificationService {
     }
 
     var azkarId = _azkarBaseId;
-    for (final moment in relevantMoments) {
-      final category = switch (moment.name) {
-        'Fajr' when config.morningAzkarEnabled => 'Morning',
-        'Maghrib' when config.eveningAzkarEnabled => 'Evening',
-        _ => null,
-      };
-      if (category == null) continue;
-
-      final at = moment.at.add(const Duration(minutes: azkarDelayMinutes));
-      if (!at.isAfter(now) || !at.isBefore(horizon)) continue;
+    for (final moment in relevantAzkar) {
       final id = azkarId++;
-      final morning = category == 'Morning';
+      final morning = moment.category == 'Morning';
       await _schedule(
         id: id,
         title: config.languageCode == 'en'
@@ -306,12 +301,13 @@ class NotificationService {
         body: config.languageCode == 'en'
             ? 'Open Munib and continue your daily adhkar.'
             : 'افتح منيب وأكمل أذكارك اليومية.',
-        at: at,
+        at: moment.at,
         channelId: _azkarChannelId,
-        channelName: config.languageCode == 'en' ? 'Daily adhkar' : 'الأذكار اليومية',
+        channelName:
+            config.languageCode == 'en' ? 'Daily adhkar' : 'الأذكار اليومية',
         silent: config.silent,
         mode: scheduleMode,
-        payload: 'azkar:$category',
+        payload: 'azkar:${moment.category}',
       );
       managedIds.add(id);
     }
@@ -345,23 +341,26 @@ class NotificationService {
     int index,
     DateTime reminderAt,
   ) {
-    if (index <= 0) return false;
+    if (index <= 0 || index >= moments.length) return false;
     final previous = moments[index - 1];
     return !reminderAt.isAfter(previous.at);
   }
 
   static Future<void> _syncNafahatAzkarSchedule(
-    List<_PrayerMoment> moments,
+    List<_AzkarMoment> moments,
     NotificationScheduleConfig config,
   ) async {
     final now = _now(config.timezone);
     DateTime? nextMorning;
     DateTime? nextEvening;
     for (final moment in moments) {
-      final at = moment.at.add(const Duration(minutes: azkarDelayMinutes));
-      if (!at.isAfter(now)) continue;
-      if (moment.name == 'Fajr' && nextMorning == null) nextMorning = at;
-      if (moment.name == 'Maghrib' && nextEvening == null) nextEvening = at;
+      if (!moment.at.isAfter(now)) continue;
+      if (moment.category == 'Morning' && nextMorning == null) {
+        nextMorning = moment.at;
+      }
+      if (moment.category == 'Evening' && nextEvening == null) {
+        nextEvening = moment.at;
+      }
       if (nextMorning != null && nextEvening != null) break;
     }
 
@@ -444,12 +443,7 @@ class NotificationService {
     String timezone,
   ) {
     final result = <_PrayerMoment>[];
-    tz.Location? location;
-    if (timezone.trim().isNotEmpty) {
-      try {
-        location = tz.getLocation(timezone);
-      } catch (_) {}
-    }
+    final location = _location(timezone);
 
     for (final day in days) {
       final date = DateTime.tryParse(day.date);
@@ -477,6 +471,50 @@ class NotificationService {
     return result;
   }
 
+  static List<_AzkarMoment> _buildAzkarMoments(
+    List<PrayerDay> days,
+    NotificationScheduleConfig config,
+  ) {
+    final result = <_AzkarMoment>[];
+    final location = _location(config.timezone);
+
+    for (final day in days) {
+      final date = DateTime.tryParse(day.date);
+      if (date == null) continue;
+
+      if (config.morningAzkarEnabled) {
+        DateTime? at;
+        final customMinute = config.morningAzkarMinuteOfDay;
+        if (customMinute != null) {
+          at = _dateAtMinute(date, customMinute, location);
+        } else {
+          final fajr = _parsePrayerTime(
+            date,
+            day.fajr,
+            'Fajr',
+            location,
+          );
+          at = fajr?.add(
+            const Duration(minutes: defaultMorningAzkarDelayMinutes),
+          );
+        }
+        if (at != null) result.add(_AzkarMoment(category: 'Morning', at: at));
+      }
+
+      if (config.eveningAzkarEnabled) {
+        final at = _dateAtMinute(
+          date,
+          config.eveningAzkarMinuteOfDay,
+          location,
+        );
+        result.add(_AzkarMoment(category: 'Evening', at: at));
+      }
+    }
+
+    result.sort((a, b) => a.at.compareTo(b.at));
+    return result;
+  }
+
   static DateTime? _parsePrayerTime(
     DateTime date,
     String raw,
@@ -494,6 +532,29 @@ class NotificationService {
     }
     if (prayer == 'Dhuhr' && hour < 10) hour += 12;
 
+    return _dateAt(
+      date,
+      hour,
+      minute,
+      location,
+    );
+  }
+
+  static DateTime _dateAtMinute(
+    DateTime date,
+    int minuteOfDay,
+    tz.Location? location,
+  ) {
+    final safe = minuteOfDay.clamp(0, 1439).toInt();
+    return _dateAt(date, safe ~/ 60, safe % 60, location);
+  }
+
+  static DateTime _dateAt(
+    DateTime date,
+    int hour,
+    int minute,
+    tz.Location? location,
+  ) {
     if (location != null) {
       return tz.TZDateTime(
         location,
@@ -507,13 +568,18 @@ class NotificationService {
     return DateTime(date.year, date.month, date.day, hour, minute);
   }
 
-  static DateTime _now(String timezone) {
-    if (timezone.trim().isNotEmpty) {
-      try {
-        return tz.TZDateTime.now(tz.getLocation(timezone));
-      } catch (_) {}
+  static tz.Location? _location(String timezone) {
+    if (timezone.trim().isEmpty) return null;
+    try {
+      return tz.getLocation(timezone);
+    } catch (_) {
+      return null;
     }
-    return DateTime.now();
+  }
+
+  static DateTime _now(String timezone) {
+    final location = _location(timezone);
+    return location == null ? DateTime.now() : tz.TZDateTime.now(location);
   }
 
   static String _prayerTitle(String languageCode) =>
@@ -555,4 +621,11 @@ class _PrayerMoment {
   final DateTime at;
 
   const _PrayerMoment({required this.name, required this.at});
+}
+
+class _AzkarMoment {
+  final String category;
+  final DateTime at;
+
+  const _AzkarMoment({required this.category, required this.at});
 }
