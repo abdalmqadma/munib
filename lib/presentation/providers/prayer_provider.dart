@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -8,72 +7,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/services/notification_service.dart';
 import '../../features/prayer_times/data/models/prayer_day.dart';
+import '../../features/prayer_times/data/models/saved_imsakia_location.dart';
+import '../../features/prayer_times/data/saved_imsakia_location_store.dart';
 import '../../features/prayer_times/data/widget_service.dart';
 import '../../features/prayer_times/domain/prayer_time_calculator.dart';
 
-class SavedImsakiaLocation {
-  final String id;
-  final String name;
-  final String country;
-  final double latitude;
-  final double longitude;
-  final String timezone;
-  final List<PrayerDay> prayers;
-
-  const SavedImsakiaLocation({
-    required this.id,
-    required this.name,
-    required this.country,
-    required this.latitude,
-    required this.longitude,
-    required this.timezone,
-    required this.prayers,
-  });
-
-  String get label => country.trim().isEmpty ? name : '$name, $country';
-
-  SavedImsakiaLocation copyWith({List<PrayerDay>? prayers}) {
-    return SavedImsakiaLocation(
-      id: id,
-      name: name,
-      country: country,
-      latitude: latitude,
-      longitude: longitude,
-      timezone: timezone,
-      prayers: prayers ?? this.prayers,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'country': country,
-        'latitude': latitude,
-        'longitude': longitude,
-        'timezone': timezone,
-        'prayers': prayers.map((e) => e.toJson()).toList(),
-      };
-
-  factory SavedImsakiaLocation.fromJson(Map<String, dynamic> json) {
-    final rawPrayers = json['prayers'] is List ? json['prayers'] as List : const [];
-    return SavedImsakiaLocation(
-      id: (json['id'] ?? '').toString(),
-      name: (json['name'] ?? '').toString(),
-      country: (json['country'] ?? '').toString(),
-      latitude: (json['latitude'] as num?)?.toDouble() ?? 0,
-      longitude: (json['longitude'] as num?)?.toDouble() ?? 0,
-      timezone: (json['timezone'] ?? '').toString(),
-      prayers: rawPrayers
-          .whereType<Map>()
-          .map((e) => PrayerDay.fromJson(Map<String, dynamic>.from(e)))
-          .toList(),
-    );
-  }
-}
+export '../../features/prayer_times/data/models/saved_imsakia_location.dart';
 
 class PrayerProvider with ChangeNotifier {
-  static const _savedLocationsKey = 'savedImsakiaLocationsV1';
-  static const _activeLocationKey = 'activeImsakiaLocationId';
   static const _morningAzkarMinuteKey = 'morningAzkarMinuteOfDay';
   static const _eveningAzkarMinuteKey = 'eveningAzkarMinuteOfDay';
   static const notificationPrayers = <String>[
@@ -84,6 +25,8 @@ class PrayerProvider with ChangeNotifier {
     'Isha',
   ];
 
+  final SavedImsakiaLocationStore _savedLocationsStore =
+      const SavedImsakiaLocationStore();
   List<PrayerDay> _monthlyPrayers = [];
   PrayerDay? _currentDay;
   String _nextPrayerName = '';
@@ -146,21 +89,21 @@ class PrayerProvider with ChangeNotifier {
   Future<void> _initialize() async {
     final prefs = await SharedPreferences.getInstance();
     _readSettings(prefs);
-    _readSavedLocations(prefs);
+    _savedLocations = await _savedLocationsStore.load();
 
     if (_savedLocations.isNotEmpty) {
       final primary = _savedLocations.first;
       _activeLocationId = primary.id;
       _activeTimezone = primary.timezone;
       currentCity = primary.label;
-      await prefs.setString(_activeLocationKey, primary.id);
+      await _savedLocationsStore.setActiveLocationId(primary.id);
       await prefs.setString('currentCity', currentCity);
       await WidgetService.saveLocation(primary.name);
       await _applyPrayers(primary.prayers);
     } else {
       _activeLocationId = null;
       _activeTimezone = '';
-      await prefs.remove(_activeLocationKey);
+      await _savedLocationsStore.setActiveLocationId(null);
       await _loadFromHive();
       await WidgetService.saveLocation(currentCity == 'غير محدد' ? '' : currentCity);
     }
@@ -210,23 +153,6 @@ class PrayerProvider with ChangeNotifier {
                   NotificationService.defaultReminderMinutes)
               .clamp(1, 1440)
               .toInt();
-    }
-  }
-
-  void _readSavedLocations(SharedPreferences prefs) {
-    final savedJson = prefs.getString(_savedLocationsKey);
-    if (savedJson == null || savedJson.isEmpty) return;
-    try {
-      final decoded = jsonDecode(savedJson);
-      if (decoded is List) {
-        _savedLocations = decoded
-            .whereType<Map>()
-            .map((e) => SavedImsakiaLocation.fromJson(Map<String, dynamic>.from(e)))
-            .where((e) => e.prayers.isNotEmpty)
-            .toList();
-      }
-    } catch (_) {
-      _savedLocations = [];
     }
   }
 
@@ -344,7 +270,7 @@ class PrayerProvider with ChangeNotifier {
     await WidgetService.saveLocation(item.name);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('currentCity', currentCity);
-    await prefs.setString(_activeLocationKey, item.id);
+    await _savedLocationsStore.setActiveLocationId(item.id);
     if (persistLocations) await _persistSavedLocations();
     await _applyPrayers(item.prayers);
   }
@@ -381,18 +307,10 @@ class PrayerProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _persistSavedLocations() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _savedLocationsKey,
-      jsonEncode(_savedLocations.map((e) => e.toJson()).toList()),
-    );
-    if (_activeLocationId != null) {
-      await prefs.setString(_activeLocationKey, _activeLocationId!);
-    } else {
-      await prefs.remove(_activeLocationKey);
-    }
-  }
+  Future<void> _persistSavedLocations() => _savedLocationsStore.save(
+        locations: _savedLocations,
+        activeLocationId: _activeLocationId,
+      );
 
   Future<void> setLanguage(String code) async {
     final normalized = code.toLowerCase() == 'en' || code == 'English' ? 'en' : 'ar';
