@@ -32,6 +32,18 @@ class SavedImsakiaLocation {
 
   String get label => country.trim().isEmpty ? name : '$name, $country';
 
+  SavedImsakiaLocation copyWith({List<PrayerDay>? prayers}) {
+    return SavedImsakiaLocation(
+      id: id,
+      name: name,
+      country: country,
+      latitude: latitude,
+      longitude: longitude,
+      timezone: timezone,
+      prayers: prayers ?? this.prayers,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
@@ -99,9 +111,68 @@ class PrayerProvider with ChangeNotifier {
   ThemeMode get themeMode => isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
   PrayerProvider() {
-    _loadFromHive();
-    _loadSettings();
+    unawaited(_initialize());
     _startTimer();
+  }
+
+  Future<void> _initialize() async {
+    final prefs = await SharedPreferences.getInstance();
+    _readSettings(prefs);
+    _readSavedLocations(prefs);
+
+    if (_savedLocations.isNotEmpty) {
+      final primary = _savedLocations.first;
+      _activeLocationId = primary.id;
+      _activeTimezone = primary.timezone;
+      currentCity = primary.label;
+      await prefs.setString(_activeLocationKey, primary.id);
+      await prefs.setString('currentCity', currentCity);
+      await WidgetService.saveLocation(primary.name);
+      await _applyPrayers(primary.prayers);
+    } else {
+      _activeLocationId = null;
+      _activeTimezone = '';
+      await prefs.remove(_activeLocationKey);
+      await _loadFromHive();
+      await WidgetService.saveLocation(currentCity == 'غير محدد' ? '' : currentCity);
+    }
+
+    await WidgetService.savePreferences(
+      languageCode: languageCode,
+      use24HourFormat: use24HourFormat,
+    );
+    _updateCurrentStatus(forceWidgetUpdate: true);
+    notifyListeners();
+  }
+
+  void _readSettings(SharedPreferences prefs) {
+    prayerNotif = prefs.getBool('prayerNotif') ?? true;
+    reminderNotif = prefs.getBool('reminderNotif') ?? true;
+    azkarNotif = prefs.getBool('azkarNotif') ?? false;
+    silentMode = prefs.getBool('silentMode') ?? false;
+    adhanVoice = prefs.getString('adhanVoice') ?? 'Meccan';
+    currentCity = prefs.getString('currentCity') ?? 'غير محدد';
+    final savedLanguage = prefs.getString('language') ?? 'ar';
+    language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
+    isDarkMode = prefs.getBool('isDarkMode') ?? true;
+    use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
+  }
+
+  void _readSavedLocations(SharedPreferences prefs) {
+    final savedJson = prefs.getString(_savedLocationsKey);
+    if (savedJson == null || savedJson.isEmpty) return;
+    try {
+      final decoded = jsonDecode(savedJson);
+      if (decoded is List) {
+        _savedLocations = decoded
+            .whereType<Map>()
+            .map((e) => SavedImsakiaLocation.fromJson(Map<String, dynamic>.from(e)))
+            .where((e) => e.prayers.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      _savedLocations = [];
+    }
   }
 
   Future<void> _loadFromHive() async {
@@ -115,14 +186,26 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
+    // When the current schedule belongs to a saved location, keep that saved
+    // copy in sync. Otherwise a restart would restore the older schedule.
+    final activeId = _activeLocationId;
+    if (activeId != null) {
+      final index = _savedLocations.indexWhere((e) => e.id == activeId);
+      if (index >= 0) {
+        _savedLocations[index] = _savedLocations[index].copyWith(
+          prayers: List<PrayerDay>.from(prayers),
+        );
+        await _persistSavedLocations();
+      }
+    }
     await _applyPrayers(prayers);
   }
 
   Future<void> _applyPrayers(List<PrayerDay> prayers) async {
-    _monthlyPrayers = prayers;
+    _monthlyPrayers = List<PrayerDay>.from(prayers);
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
-    await box.addAll(prayers);
+    await box.addAll(_monthlyPrayers);
     await WidgetService.savePrayerSchedule(
       _monthlyPrayers,
       timezone: _activeTimezone,
@@ -154,7 +237,7 @@ class PrayerProvider with ChangeNotifier {
       latitude: latitude,
       longitude: longitude,
       timezone: timezone,
-      prayers: prayers,
+      prayers: List<PrayerDay>.from(prayers),
     );
 
     final index = _savedLocations.indexWhere((e) => e.id == id);
@@ -164,14 +247,14 @@ class PrayerProvider with ChangeNotifier {
       _savedLocations.add(item);
     }
 
-    // Display priority is the source of truth: the first location is always
-    // the primary schedule, the second is secondary, and the rest are idle.
+    // The first saved location remains the primary source of truth. Users can
+    // reorder locations explicitly from Imsakia settings.
     await _activateLocation(_savedLocations.first, persistLocations: true);
   }
 
   Future<void> _snapshotCurrentImsakiaIfNeeded() async {
     if (_monthlyPrayers.isEmpty) return;
-    final id = 'legacy-current';
+    const id = 'legacy-current';
     if (_savedLocations.any((e) => e.id == id)) return;
     final fallbackName = currentCity.trim().isEmpty || currentCity == 'غير محدد'
         ? (isEnglish ? 'Current Imsakia' : 'الإمساكية الحالية')
@@ -197,8 +280,6 @@ class PrayerProvider with ChangeNotifier {
 
     final item = _savedLocations.removeAt(oldIndex);
     _savedLocations.insert(newIndex, item);
-    // Update the list immediately so drag-and-drop feels responsive, then
-    // switch the app and native widgets to the new highest-priority location.
     notifyListeners();
     await _activateLocation(_savedLocations.first, persistLocations: true);
   }
@@ -227,7 +308,25 @@ class PrayerProvider with ChangeNotifier {
 
     _activeLocationId = null;
     _activeTimezone = '';
+    currentCity = 'غير محدد';
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('currentCity');
     await _persistSavedLocations();
+
+    _monthlyPrayers = [];
+    _currentDay = null;
+    _nextPrayerName = '';
+    _nextPrayerTime = null;
+    _timeLeft = Duration.zero;
+    _lastWidgetStateKey = null;
+
+    final box = await Hive.openBox<PrayerDay>('prayers');
+    await box.clear();
+    await WidgetService.clearPrayerData(
+      languageCode: languageCode,
+      use24HourFormat: use24HourFormat,
+    );
     notifyListeners();
   }
 
@@ -242,56 +341,6 @@ class PrayerProvider with ChangeNotifier {
     } else {
       await prefs.remove(_activeLocationKey);
     }
-  }
-
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    prayerNotif = prefs.getBool('prayerNotif') ?? true;
-    reminderNotif = prefs.getBool('reminderNotif') ?? true;
-    azkarNotif = prefs.getBool('azkarNotif') ?? false;
-    silentMode = prefs.getBool('silentMode') ?? false;
-    adhanVoice = prefs.getString('adhanVoice') ?? 'Meccan';
-    currentCity = prefs.getString('currentCity') ?? 'غير محدد';
-    final savedLanguage = prefs.getString('language') ?? 'ar';
-    language = savedLanguage == 'en' || savedLanguage == 'English' ? 'English' : 'العربية';
-    isDarkMode = prefs.getBool('isDarkMode') ?? true;
-    use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
-
-    final savedJson = prefs.getString(_savedLocationsKey);
-    if (savedJson != null && savedJson.isNotEmpty) {
-      try {
-        final decoded = jsonDecode(savedJson);
-        if (decoded is List) {
-          _savedLocations = decoded
-              .whereType<Map>()
-              .map((e) => SavedImsakiaLocation.fromJson(Map<String, dynamic>.from(e)))
-              .where((e) => e.prayers.isNotEmpty)
-              .toList();
-        }
-      } catch (_) {}
-    }
-    if (_savedLocations.isNotEmpty) {
-      final primary = _savedLocations.first;
-      _activeLocationId = primary.id;
-      _activeTimezone = primary.timezone;
-      currentCity = primary.label;
-      await prefs.setString(_activeLocationKey, primary.id);
-      await prefs.setString('currentCity', currentCity);
-      await WidgetService.saveLocation(primary.name);
-      await _applyPrayers(primary.prayers);
-    } else {
-      _activeLocationId = null;
-      _activeTimezone = '';
-      await prefs.remove(_activeLocationKey);
-      await WidgetService.saveLocation(currentCity);
-    }
-
-    await WidgetService.savePreferences(
-      languageCode: languageCode,
-      use24HourFormat: use24HourFormat,
-    );
-    _updateCurrentStatus(forceWidgetUpdate: true);
-    notifyListeners();
   }
 
   Future<void> setLanguage(String code) async {
@@ -382,18 +431,25 @@ class PrayerProvider with ChangeNotifier {
     if (_monthlyPrayers.isEmpty) return Duration.zero;
     final now = _nowForActiveLocation();
     final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    final today = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull ?? _currentDay;
+    final today = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull;
     if (today == null) return Duration.zero;
 
     String rawFor(PrayerDay day) {
       switch (prayerName.toLowerCase()) {
-        case 'fajr': return day.fajr;
-        case 'sunrise': return day.sunrise;
-        case 'dhuhr': return day.dhuhr;
-        case 'asr': return day.asr;
-        case 'maghrib': return day.maghrib;
-        case 'isha': return day.isha;
-        default: return '';
+        case 'fajr':
+          return day.fajr;
+        case 'sunrise':
+          return day.sunrise;
+        case 'dhuhr':
+          return day.dhuhr;
+        case 'asr':
+          return day.asr;
+        case 'maghrib':
+          return day.maghrib;
+        case 'isha':
+          return day.isha;
+        default:
+          return '';
       }
     }
 
@@ -402,9 +458,11 @@ class PrayerProvider with ChangeNotifier {
       final tomorrowReference = now.add(const Duration(days: 1));
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
       final tomorrow = _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
-      target = _parseTime(rawFor(tomorrow ?? today), tomorrowReference, prayerName);
+      if (tomorrow == null) return Duration.zero;
+      target = _parseTime(rawFor(tomorrow), tomorrowReference, prayerName);
     }
-    return target.difference(now).isNegative ? Duration.zero : target.difference(now);
+    final difference = target.difference(now);
+    return difference.isNegative ? Duration.zero : difference;
   }
 
   String formattedTimeUntilPrayer(String prayerName) => _formatDuration(timeUntilPrayer(prayerName));
@@ -417,13 +475,24 @@ class PrayerProvider with ChangeNotifier {
 
   void _updateCurrentStatus({bool forceWidgetUpdate = false}) {
     final now = _nowForActiveLocation();
-    if (_monthlyPrayers.isEmpty) return;
+    if (_monthlyPrayers.isEmpty) {
+      _currentDay = null;
+      _nextPrayerName = '';
+      _nextPrayerTime = null;
+      _timeLeft = Duration.zero;
+      return;
+    }
 
     final todayStr = DateFormat('yyyy-MM-dd').format(now);
-    _currentDay = _monthlyPrayers.firstWhere(
-      (p) => p.date == todayStr,
-      orElse: () => _monthlyPrayers.first,
-    );
+    _currentDay = _monthlyPrayers.where((p) => p.date == todayStr).firstOrNull;
+
+    if (_currentDay == null) {
+      _nextPrayerName = '';
+      _nextPrayerTime = null;
+      _timeLeft = Duration.zero;
+      notifyListeners();
+      return;
+    }
 
     _calculateNextPrayer(now);
     notifyListeners();
@@ -431,7 +500,7 @@ class PrayerProvider with ChangeNotifier {
     final widgetStateKey = '$_nextPrayerName:${_nextPrayerTime?.millisecondsSinceEpoch ?? 0}:$languageCode:$use24HourFormat';
     if (forceWidgetUpdate || widgetStateKey != _lastWidgetStateKey) {
       _lastWidgetStateKey = widgetStateKey;
-      WidgetService.updateWidget(
+      unawaited(WidgetService.updateWidget(
         currentTime: use24HourFormat
             ? DateFormat('HH:mm').format(now)
             : DateFormat('h:mm a', languageCode).format(now),
@@ -440,19 +509,22 @@ class PrayerProvider with ChangeNotifier {
         nextPrayerTime: _nextPrayerTime,
         languageCode: languageCode,
         use24HourFormat: use24HourFormat,
-      );
+      ));
     }
   }
 
   void _calculateNextPrayer(DateTime now) {
-    if (_currentDay == null) return;
-    final prayers = {
-      'Fajr': _currentDay!.fajr,
-      'Sunrise': _currentDay!.sunrise,
-      'Dhuhr': _currentDay!.dhuhr,
-      'Asr': _currentDay!.asr,
-      'Maghrib': _currentDay!.maghrib,
-      'Isha': _currentDay!.isha,
+    final day = _currentDay;
+    if (day == null) return;
+
+    // Sunrise remains visible in the daily timetable but is deliberately not
+    // treated as a prayer for the next-prayer countdown.
+    final prayers = <String, String>{
+      'Fajr': day.fajr,
+      'Dhuhr': day.dhuhr,
+      'Asr': day.asr,
+      'Maghrib': day.maghrib,
+      'Isha': day.isha,
     };
 
     DateTime? nextTime;
@@ -470,26 +542,28 @@ class PrayerProvider with ChangeNotifier {
       _nextPrayerName = 'Fajr';
       final tomorrowReference = now.add(const Duration(days: 1));
       final tomorrowStr = DateFormat('yyyy-MM-dd').format(tomorrowReference);
-      try {
-        final tomorrowData = _monthlyPrayers.firstWhere((p) => p.date == tomorrowStr);
-        final tomorrowFajr = _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
-        _nextPrayerTime = tomorrowFajr;
-        _timeLeft = tomorrowFajr.difference(now);
-      } catch (_) {
+      final tomorrowData = _monthlyPrayers.where((p) => p.date == tomorrowStr).firstOrNull;
+      if (tomorrowData == null) {
+        _nextPrayerName = '';
         _nextPrayerTime = null;
         _timeLeft = Duration.zero;
+        return;
       }
-    } else {
-      _nextPrayerName = nextName;
-      _nextPrayerTime = nextTime;
-      _timeLeft = nextTime.difference(now);
+      final tomorrowFajr = _parseTime(tomorrowData.fajr, tomorrowReference, 'Fajr');
+      _nextPrayerTime = tomorrowFajr;
+      _timeLeft = tomorrowFajr.difference(now);
+      return;
     }
+
+    _nextPrayerName = nextName;
+    _nextPrayerTime = nextTime;
+    _timeLeft = nextTime.difference(now);
   }
 
   DateTime _parseTime(String timeStr, DateTime referenceDate, String prayerName) {
     try {
       final parsed = DateFormat('HH:mm').parse(timeStr.trim());
-      int hour = parsed.hour;
+      var hour = parsed.hour;
       if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) hour += 12;
       if (prayerName == 'Dhuhr' && hour < 10) hour += 12;
 
