@@ -7,6 +7,7 @@ on:
       - "lib/**"
       - "android/**"
       - "assets/**"
+      - "test/**"
       - "pubspec.yaml"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
@@ -36,6 +37,12 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
 
       - name: Configure build memory
         run: |
