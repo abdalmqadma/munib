@@ -7,6 +7,12 @@ import 'package:timezone/timezone.dart' as tz;
 import '../models/prayer_day.dart';
 
 class WidgetService {
+  static const _widgetNames = <String>[
+    'PrayerWidgetSmall',
+    'PrayerWidgetMedium',
+    'PrayerWidgetLarge',
+  ];
+
   static Future<void> savePrayerSchedule(
     List<PrayerDay> days, {
     String timezone = '',
@@ -18,9 +24,11 @@ class WidgetService {
         final date = DateTime.tryParse(day.date);
         if (date == null) continue;
 
+        // Sunrise is displayed in the app, but it is not a prayer. Keeping it
+        // out of this schedule prevents the home-screen widget and Nafahat
+        // context from calling sunrise the "next prayer".
         final prayers = <String, String>{
           'Fajr': day.fajr,
-          'Sunrise': day.sunrise,
           'Dhuhr': day.dhuhr,
           'Asr': day.asr,
           'Maghrib': day.maghrib,
@@ -73,6 +81,27 @@ class WidgetService {
       );
     } catch (e) {
       debugPrint('Error saving widget location: $e');
+    }
+  }
+
+  static Future<void> clearPrayerData({
+    required String languageCode,
+    required bool use24HourFormat,
+  }) async {
+    try {
+      await HomeWidget.saveWidgetData<String>('prayer_schedule_json', '[]');
+      await HomeWidget.saveWidgetData<String>('widget_timezone', '');
+      await HomeWidget.saveWidgetData<String>('widget_location', '');
+      await HomeWidget.saveWidgetData<String>('next_prayer', '');
+      await HomeWidget.saveWidgetData<String>('current_time', '');
+      await HomeWidget.saveWidgetData<String>('time_left', '');
+      await HomeWidget.saveWidgetData<int>('next_prayer_epoch_ms', 0);
+      await HomeWidget.saveWidgetData<int>('next_prayer_at', 0);
+      await HomeWidget.saveWidgetData<String>('widget_language', languageCode);
+      await HomeWidget.saveWidgetData<bool>('widget_use_24h', use24HourFormat);
+      await _refreshAll();
+    } catch (e) {
+      debugPrint('Error clearing widget prayer data: $e');
     }
   }
 
@@ -137,20 +166,15 @@ class WidgetService {
         nextPrayerTime?.millisecondsSinceEpoch ?? 0,
       );
 
-      await HomeWidget.updateWidget(
-        name: 'PrayerWidgetSmall',
-        androidName: 'PrayerWidgetSmall',
-      );
-      await HomeWidget.updateWidget(
-        name: 'PrayerWidgetMedium',
-        androidName: 'PrayerWidgetMedium',
-      );
-      await HomeWidget.updateWidget(
-        name: 'PrayerWidgetLarge',
-        androidName: 'PrayerWidgetLarge',
-      );
+      await _refreshAll();
     } catch (e) {
       debugPrint('Error updating widgets: $e');
+    }
+  }
+
+  static Future<void> _refreshAll() async {
+    for (final name in _widgetNames) {
+      await HomeWidget.updateWidget(name: name, androidName: name);
     }
   }
 }
