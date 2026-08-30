@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,6 +20,8 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
   final _searchService = PlaceSearchService();
   final _aiService = AIService();
 
+  Timer? _debounce;
+  int _searchGeneration = 0;
   bool _searching = false;
   bool _adding = false;
   String? _error;
@@ -28,30 +32,49 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
-    final query = _controller.text.trim();
-    if (query.length < 2 || _searching) return;
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    final query = value.trim();
+    if (query.isEmpty) {
+      _searchGeneration++;
+      setState(() {
+        _searching = false;
+        _results = const [];
+        _error = null;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 320), () => _search(query));
+  }
+
+  Future<void> _search([String? rawQuery]) async {
+    final query = (rawQuery ?? _controller.text).trim();
+    if (query.isEmpty) return;
+
+    final generation = ++_searchGeneration;
     setState(() {
       _searching = true;
       _error = null;
     });
     try {
       final result = await _searchService.search(query);
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() => _results = result);
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = t(
-              'تعذر البحث عن الأماكن. تحقق من الإنترنت وحاول مرة أخرى.',
-              'Could not search places. Check your connection and try again.',
-            ));
-      }
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() => _error = t(
+            'تعذر البحث عن الأماكن. تحقق من الإنترنت وحاول مرة أخرى.',
+            'Could not search places. Check your connection and try again.',
+          ));
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _searching = false);
+      }
     }
   }
 
@@ -107,12 +130,20 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                 controller: _controller,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _search(),
+                onChanged: _onQueryChanged,
+                onSubmitted: (value) {
+                  _debounce?.cancel();
+                  _search(value);
+                },
                 decoration: InputDecoration(
-                  hintText: t('ابحث عن مدينة أو دولة...', 'Search for a city or country...'),
+                  hintText:
+                      t('ابحث عن مدينة أو دولة...', 'Search for a city or country...'),
                   prefixIcon: const Icon(Icons.public_rounded),
                   suffixIcon: IconButton(
-                    onPressed: _searching ? null : _search,
+                    onPressed: () {
+                      _debounce?.cancel();
+                      _search();
+                    },
                     icon: const Icon(Icons.search_rounded),
                   ),
                 ),
@@ -137,13 +168,19 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.travel_explore_rounded, size: 58, color: scheme.primary),
+                            Icon(Icons.travel_explore_rounded,
+                                size: 58, color: scheme.primary),
                             const SizedBox(height: 16),
                             Text(
-                              t(
-                                'اكتب اسم أي مدينة في العالم، مثل غزة أو بروكسل أو إسطنبول.',
-                                'Type any city in the world, such as Gaza, Brussels, or Istanbul.',
-                              ),
+                              _controller.text.trim().isEmpty
+                                  ? t(
+                                      'ابدأ بكتابة اسم المدينة وستظهر النتائج مباشرة.',
+                                      'Start typing a city name and results will appear automatically.',
+                                    )
+                                  : t(
+                                      'لا توجد نتائج مطابقة حتى الآن.',
+                                      'No matching results yet.',
+                                    ),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.bodyLarge,
                             ),
@@ -174,7 +211,8 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                                       color: scheme.primary.withValues(alpha: .12),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
-                                    child: Icon(Icons.location_on_outlined, color: scheme.primary),
+                                    child: Icon(Icons.location_on_outlined,
+                                        color: scheme.primary),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -185,7 +223,8 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                                           [place.city, place.country]
                                               .where((e) => e.trim().isNotEmpty)
                                               .join(', '),
-                                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                                          style: theme.textTheme.titleMedium
+                                              ?.copyWith(fontWeight: FontWeight.w700),
                                         ),
                                         const SizedBox(height: 3),
                                         Text(
