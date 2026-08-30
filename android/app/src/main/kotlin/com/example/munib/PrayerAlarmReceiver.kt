@@ -131,8 +131,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED,
-            -> PrayerAlarmScheduler.restore(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> PrayerAlarmScheduler.restore(context)
 
             ACTION_STOP_ADHAN -> {
                 val id = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
