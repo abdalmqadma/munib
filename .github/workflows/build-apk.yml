@@ -52,4 +52,8 @@ jobs:
 
       - name: Compile Android Kotlin
         working-directory: android
-        run: gradle :app:compileDebugKotlin --stacktrace
+        run: >-
+          gradle :app:compileDebugKotlin --stacktrace
+          -Ptarget-platform=android-arm64
+          --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m"
