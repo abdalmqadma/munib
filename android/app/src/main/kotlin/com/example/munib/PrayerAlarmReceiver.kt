@@ -159,7 +159,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val lastTap = prefs.getLong(key, -1L)
         val elapsed = if (lastTap >= 0L) now - lastTap else Long.MAX_VALUE
 
-        if (elapsed in 0..DOUBLE_TAP_WINDOW_MS) {
+        if (elapsed >= 0L && elapsed <= DOUBLE_TAP_WINDOW_MS) {
             prefs.edit().remove(key).apply()
             val launchIntent = context.packageManager
                 .getLaunchIntentForPackage(context.packageName)
