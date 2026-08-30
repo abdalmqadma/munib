@@ -132,12 +132,12 @@ class MunibUltimateWidget extends StatelessWidget {
   _LocationPrayer? _nextPrayerForLocation(SavedImsakiaLocation location) {
     if (location.prayers.isEmpty) return null;
 
+    tz.Location? locationZone;
     DateTime now;
-    tz.Location? zone;
     if (location.timezone.trim().isNotEmpty) {
       try {
-        zone = tz.getLocation(location.timezone);
-        now = tz.TZDateTime.now(zone);
+        locationZone = tz.getLocation(location.timezone);
+        now = tz.TZDateTime.now(locationZone);
       } catch (_) {
         now = DateTime.now();
       }
@@ -160,9 +160,10 @@ class MunibUltimateWidget extends StatelessWidget {
         hour += 12;
       }
       if (prayerName == 'Dhuhr' && hour < 10) hour += 12;
-      if (zone != null) {
+      final activeZone = locationZone;
+      if (activeZone != null) {
         return tz.TZDateTime(
-          zone,
+          activeZone,
           date.year,
           date.month,
           date.day,
