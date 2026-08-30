@@ -10,14 +10,28 @@ import '../providers/prayer_provider.dart';
 typedef AsyncCountChanged = Future<void> Function(int count);
 
 class AzkarScreen extends StatelessWidget {
-  const AzkarScreen({super.key});
+  static const categories = ['Morning', 'Evening', 'After Prayer', 'Sleep'];
+
+  final String initialCategoryKey;
+
+  const AzkarScreen({
+    super.key,
+    this.initialCategoryKey = 'Morning',
+  });
+
+  int get _initialIndex {
+    final index = categories.indexOf(initialCategoryKey);
+    return index < 0 ? 0 : index;
+  }
 
   @override
   Widget build(BuildContext context) {
     final isEn = context.watch<PrayerProvider>().isEnglish;
     final theme = Theme.of(context);
     return DefaultTabController(
-      length: 4,
+      key: ValueKey('azkar-tabs-$initialCategoryKey'),
+      length: categories.length,
+      initialIndex: _initialIndex,
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: false,
@@ -43,12 +57,9 @@ class AzkarScreen extends StatelessWidget {
           ),
         ),
         body: TabBarView(
-          children: [
-            AzkarList(category: 'Morning', isEn: isEn),
-            AzkarList(category: 'Evening', isEn: isEn),
-            AzkarList(category: 'After Prayer', isEn: isEn),
-            AzkarList(category: 'Sleep', isEn: isEn),
-          ],
+          children: categories
+              .map((category) => AzkarList(category: category, isEn: isEn))
+              .toList(growable: false),
         ),
       ),
     );
@@ -149,9 +160,7 @@ class _AzkarListState extends State<AzkarList> {
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
 
     if (_items.isEmpty) {
       return Center(
