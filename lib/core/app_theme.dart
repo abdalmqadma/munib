@@ -12,11 +12,15 @@ class AppTheme {
     final isDark = brightness == Brightness.dark;
 
     final background = isDark ? AppColors.background : AppColors.lightBackground;
-    final backgroundDeep = isDark ? AppColors.backgroundDeep : AppColors.lightBackgroundDeep;
+    final backgroundDeep =
+        isDark ? AppColors.backgroundDeep : AppColors.lightBackgroundDeep;
     final surface = isDark ? AppColors.surface : AppColors.lightSurface;
-    final surfaceElevated = isDark ? AppColors.surfaceElevated : AppColors.lightSurfaceElevated;
-    final textPrimary = isDark ? AppColors.textPrimary : AppColors.lightTextPrimary;
-    final textSecondary = isDark ? AppColors.textSecondary : AppColors.lightTextSecondary;
+    final surfaceElevated =
+        isDark ? AppColors.surfaceElevated : AppColors.lightSurfaceElevated;
+    final textPrimary =
+        isDark ? AppColors.textPrimary : AppColors.lightTextPrimary;
+    final textSecondary =
+        isDark ? AppColors.textSecondary : AppColors.lightTextSecondary;
     final textMuted = isDark ? AppColors.textMuted : AppColors.lightTextMuted;
     final border = isDark ? AppColors.border : AppColors.lightBorder;
     final divider = isDark ? AppColors.divider : AppColors.lightDivider;
@@ -59,7 +63,6 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      fontFamily: 'Inter',
       colorScheme: scheme,
       scaffoldBackgroundColor: background,
       canvasColor: background,
@@ -86,14 +89,20 @@ class AppTheme {
           side: BorderSide(color: border),
         ),
       ),
-      dividerTheme: DividerThemeData(color: divider, thickness: 1, space: 1),
+      dividerTheme: DividerThemeData(
+        color: divider,
+        thickness: 1,
+        space: 1,
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.gold,
           foregroundColor: AppColors.backgroundDeep,
           elevation: 0,
           minimumSize: const Size(48, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
@@ -102,7 +111,9 @@ class AppTheme {
           foregroundColor: textPrimary,
           minimumSize: const Size(48, 52),
           side: BorderSide(color: border),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -132,8 +143,14 @@ class AppTheme {
         unselectedItemColor: textMuted,
         selectedIconTheme: const IconThemeData(color: AppColors.gold),
         unselectedIconTheme: IconThemeData(color: textMuted),
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 12,
+        ),
         showUnselectedLabels: true,
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -146,17 +163,27 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: surface,
         surfaceTintColor: Colors.transparent,
-        titleTextStyle: TextStyle(color: textPrimary, fontSize: 20, fontWeight: FontWeight.w700),
+        titleTextStyle: TextStyle(
+          color: textPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
         contentTextStyle: TextStyle(color: textSecondary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceElevated,
         contentTextStyle: TextStyle(color: textPrimary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         behavior: SnackBarBehavior.floating,
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(color: AppColors.gold),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: AppColors.gold,
+      ),
     );
   }
 }
