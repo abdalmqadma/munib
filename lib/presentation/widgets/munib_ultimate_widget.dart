@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' as intl;
 import 'package:provider/provider.dart';
 import 'package:timezone/timezone.dart' as tz;
 
@@ -146,7 +146,7 @@ class MunibUltimateWidget extends StatelessWidget {
     }
 
     PrayerDay? findDay(DateTime date) {
-      final key = DateFormat('yyyy-MM-dd').format(date);
+      final key = intl.DateFormat('yyyy-MM-dd').format(date);
       for (final day in location.prayers) {
         if (day.date == key) return day;
       }
@@ -154,7 +154,7 @@ class MunibUltimateWidget extends StatelessWidget {
     }
 
     DateTime parse(String raw, String prayerName, DateTime date) {
-      final parsed = DateFormat('HH:mm').parse(raw.trim());
+      final parsed = intl.DateFormat('HH:mm').parse(raw.trim());
       var hour = parsed.hour;
       if (['Asr', 'Maghrib', 'Isha'].contains(prayerName) && hour < 12) {
         hour += 12;
