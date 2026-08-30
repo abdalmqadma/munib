@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -26,12 +28,15 @@ import androidx.core.app.NotificationCompat
 import es.antonborri.home_widget.HomeWidgetPlugin
 import org.json.JSONArray
 import java.util.Calendar
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.hypot
 
 class NafahatBubbleService : Service() {
     companion object {
-        @Volatile var isRunning: Boolean = false
+        @Volatile
+        var isRunning: Boolean = false
+
         const val ACTION_REFRESH_SETTINGS = "com.example.munib.NAFAHAT_REFRESH_SETTINGS"
         private const val CHANNEL_ID = "nafahat_bubble"
         private const val NOTIFICATION_ID = 9127
@@ -39,31 +44,7 @@ class NafahatBubbleService : Service() {
         private const val KEY_NEXT_DUE_AT = "next_due_at"
     }
 
-    private data class Nafha(
-        val kind: String,
-        val text: String,
-        val source: String,
-        val detailTitle: String,
-        val detail: String,
-        val extraTitle: String? = null,
-        val extra: String? = null,
-        val contextTag: String? = null,
-    )
-
-    /* Religious content is fixed local content and is never AI-generated. */
-    private val items = listOf(
-        Nafha("آية", "﴿ألا بذكر الله تطمئن القلوب﴾", "الرعد: 28", "تفسير مختصر", "تطمئن قلوب المؤمنين بذكر الله ومعرفته والأنس به.", "سبب النزول", "لم يُضف في قاعدة منيب سبب نزول خاص موثّق لهذه الآية."),
-        Nafha("حديث", "أحب الأعمال إلى الله أدومها وإن قل", "متفق عليه", "الفائدة", "الاستمرار على العمل الصالح القليل أحب من نشاط ينقطع سريعاً."),
-        Nafha("ذكر", "سبحان الله وبحمده", "ذكر ثابت في السنة", "من فضائله", "ذكر عظيم الأجر، يجمع تنزيه الله وحمده، ويستحب الإكثار منه.", contextTag = "morning"),
-        Nafha("آية", "﴿ومن يتوكل على الله فهو حسبه﴾", "الطلاق: 3", "تفسير مختصر", "من يعتمد على الله بصدق مع أخذ الأسباب كفاه الله ما أهمه.", "سبب النزول", "لم يُضف في قاعدة منيب سبب نزول خاص موثّق لهذه الآية."),
-        Nafha("حديث", "الكلمة الطيبة صدقة", "متفق عليه", "الفائدة", "الكلام الحسن والإحسان باللسان باب من أبواب الصدقة اليومية."),
-        Nafha("ذكر", "لا حول ولا قوة إلا بالله", "ذكر ثابت في السنة", "من فضائله", "تفويض واستعانة بالله، وتذكير بأن القوة والتوفيق منه سبحانه.", contextTag = "evening"),
-        Nafha("آية", "﴿إن مع العسر يسرا﴾", "الشرح: 6", "تفسير مختصر", "وعد بأن الشدة لا تنفك عن تيسير وفرج من الله.", "سبب النزول", "لم يُضف في قاعدة منيب سبب نزول خاص موثّق لهذه الآية."),
-        Nafha("أثر طيب", "اجعل لك خبيئة من عمل صالح لا يعلم بها أحد.", "تذكير تربوي", "المعنى", "إخفاء بعض الطاعات يعين على الإخلاص ويجعل بين العبد وربه عملاً لا يراه الناس."),
-        Nafha("آية", "﴿حافظوا على الصلوات والصلاة الوسطى وقوموا لله قانتين﴾", "البقرة: 238", "تفسير مختصر", "أمر بالمحافظة على الصلوات وأدائها في أوقاتها مع الخشوع لله.", "سبب النزول", "لم يُضف في قاعدة منيب سبب نزول خاص موثّق لهذه الآية.", contextTag = "pre_prayer"),
-        Nafha("آية", "﴿يا أيها الذين آمنوا إذا نودي للصلاة من يوم الجمعة فاسعوا إلى ذكر الله﴾", "الجمعة: 9", "تفسير مختصر", "إذا نودي لصلاة الجمعة يترك المسلم ما يشغله ويتوجه إلى ذكر الله والصلاة.", "سبب النزول", "لم يُضف في قاعدة منيب سبب نزول خاص موثّق لهذه الآية.", contextTag = "friday"),
-    )
-
+    private val items = NafahatContentRepository.items
     private lateinit var wm: WindowManager
     private lateinit var bubble: TextView
     private var bubbleAttached = false
@@ -71,6 +52,7 @@ class NafahatBubbleService : Service() {
     private var card: LinearLayout? = null
     private var deleteTarget: TextView? = null
     private var index = 0
+    private var unread = true
     private var snapAnimator: ValueAnimator? = null
     private val handler = Handler(Looper.getMainLooper())
 
@@ -81,8 +63,6 @@ class NafahatBubbleService : Service() {
             scheduleNextFromNow()
         }
     }
-
-    private val autoDismiss = Runnable { if (card == null) dismissCurrentBubble() }
 
     override fun onCreate() {
         super.onCreate()
@@ -106,13 +86,26 @@ class NafahatBubbleService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_REFRESH_SETTINGS) {
             handler.removeCallbacks(nextNafha)
-            handler.removeCallbacks(autoDismiss)
-            if (currentFilteredItems().none { it == items[index] }) selectContextualItem(firstRun = false)
-            if (bubbleAttached) scheduleAutoDismiss()
-            scheduleNextFromNow()
+            if (currentFilteredItems().none { it == items[index] }) {
+                selectContextualItem(firstRun = false)
+            }
+            applyBubbleStyle()
             updateCard()
+            startForegroundNotification()
+
+            val dueAt = prefs().getLong(KEY_NEXT_DUE_AT, 0L)
+            if (dueAt > System.currentTimeMillis()) scheduleAt(dueAt)
+            else scheduleNextFromNow()
         }
         return START_STICKY
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (themeMode() == "system") {
+            applyBubbleStyle()
+            updateCard()
+        }
     }
 
     override fun onDestroy() {
@@ -129,27 +122,43 @@ class NafahatBubbleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-    private fun intervalMinutes(): Int = prefs().getInt("interval_minutes", 30).coerceIn(10, 180)
-    private fun visibleSeconds(): Int = prefs().getInt("visible_seconds", 45).coerceIn(15, 180)
-    private fun quietMode(): Boolean = prefs().getBoolean("quiet_mode", false)
-    private fun contextualMode(): Boolean = prefs().getBoolean("contextual_mode", true)
 
-    private fun enabledKinds(): Set<String> = prefs().getStringSet("enabled_kinds", null)?.takeIf { it.isNotEmpty() }
-        ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
+    private fun intervalMinutes(): Int =
+        prefs().getInt("interval_minutes", 30).coerceIn(10, 180)
 
-    private fun currentFilteredItems(): List<Nafha> = items.filter { it.kind in enabledKinds() }.ifEmpty { items }
+    private fun contextualMode(): Boolean =
+        prefs().getBoolean("contextual_mode", true)
+
+    private fun themeMode(): String =
+        prefs().getString("theme_mode", "system") ?: "system"
+
+    private fun enabledKinds(): Set<String> =
+        prefs().getStringSet("enabled_kinds", null)?.takeIf { it.isNotEmpty() }
+            ?: setOf("آية", "حديث", "ذكر", "أثر طيب")
+
+    private fun currentFilteredItems(): List<NafhaContent> =
+        items.filter { it.kind in enabledKinds() }.ifEmpty { items }
 
     private fun selectContextualItem(firstRun: Boolean) {
         val available = currentFilteredItems()
         if (contextualMode()) {
             val tag = currentContextTag()
-            val contextual = tag?.let { t -> available.filter { it.contextTag == t } }.orEmpty()
+            val contextual = tag?.let { wanted ->
+                available.filter { it.contextTag == wanted }
+            }.orEmpty()
             if (contextual.isNotEmpty()) {
-                index = items.indexOf(contextual.first()).coerceAtLeast(0)
+                val current = contextual.firstOrNull { items.indexOf(it) != index }
+                    ?: contextual.first()
+                index = items.indexOf(current).coerceAtLeast(0)
                 return
             }
         }
-        if (firstRun) index = items.indexOf(available.first()).coerceAtLeast(0) else selectNextItem()
+
+        if (firstRun) {
+            index = items.indexOf(available.first()).coerceAtLeast(0)
+        } else {
+            selectNextItem()
+        }
     }
 
     private fun selectNextItem() {
@@ -161,10 +170,14 @@ class NafahatBubbleService : Service() {
     }
 
     private fun currentContextTag(): String? {
-        val calendar = Calendar.getInstance()
+        val calendar = Calendar.getInstance(selectedTimeZone())
         if (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY) return "friday"
+
         val untilPrayer = millisUntilNextPrayer()
-        if (untilPrayer != null && untilPrayer in 1..(20 * 60_000L)) return "pre_prayer"
+        if (untilPrayer != null && untilPrayer in 1..(20 * 60_000L)) {
+            return "pre_prayer"
+        }
+
         return when (calendar.get(Calendar.HOUR_OF_DAY)) {
             in 5..10 -> "morning"
             in 17..22 -> "evening"
@@ -172,8 +185,22 @@ class NafahatBubbleService : Service() {
         }
     }
 
+    private fun selectedTimeZone(): TimeZone {
+        val raw = HomeWidgetPlugin.getData(this)
+            .getString("widget_timezone", null)
+            ?.trim()
+            .orEmpty()
+        return if (raw.isNotEmpty() && TimeZone.getAvailableIDs().contains(raw)) {
+            TimeZone.getTimeZone(raw)
+        } else {
+            TimeZone.getDefault()
+        }
+    }
+
     private fun millisUntilNextPrayer(): Long? = try {
-        val raw = HomeWidgetPlugin.getData(this).getString("prayer_schedule_json", null) ?: return null
+        val raw = HomeWidgetPlugin.getData(this)
+            .getString("prayer_schedule_json", null)
+            ?: return null
         val now = System.currentTimeMillis()
         val array = JSONArray(raw)
         var closest: Long? = null
@@ -182,7 +209,9 @@ class NafahatBubbleService : Service() {
             if (at > now && (closest == null || at < closest!!)) closest = at
         }
         closest?.minus(now)
-    } catch (_: Exception) { null }
+    } catch (_: Exception) {
+        null
+    }
 
     private fun scheduleNextFromNow() {
         val dueAt = System.currentTimeMillis() + intervalMinutes() * 60_000L
@@ -192,187 +221,494 @@ class NafahatBubbleService : Service() {
 
     private fun scheduleAt(dueAt: Long) {
         handler.removeCallbacks(nextNafha)
-        handler.postDelayed(nextNafha, (dueAt - System.currentTimeMillis()).coerceAtLeast(1_000L))
-    }
-
-    private fun scheduleAutoDismiss() {
-        handler.removeCallbacks(autoDismiss)
-        val seconds = if (quietMode()) minOf(visibleSeconds(), 30) else visibleSeconds()
-        handler.postDelayed(autoDismiss, seconds * 1000L)
+        handler.postDelayed(
+            nextNafha,
+            (dueAt - System.currentTimeMillis()).coerceAtLeast(1_000L),
+        )
     }
 
     private fun showCurrentNafha() {
         createBubbleIfNeeded()
-        bubble.setBackgroundResource(R.drawable.nafahat_bubble_unread_bg)
-        bubble.alpha = 0f
+        unread = true
+        applyBubbleStyle()
+
         if (!bubbleAttached) {
+            bubble.alpha = 0f
             wm.addView(bubble, bubbleParams)
             bubbleAttached = true
+            bubble.animate()
+                .alpha(1f)
+                .setDuration(220L)
+                .start()
+            snapToNearestEdge()
+        } else {
+            bubble.alpha = 1f
         }
-        bubble.animate().cancel()
-        bubble.animate().alpha(if (quietMode()) .82f else 1f).setDuration(220L).start()
-        snapToNearestEdge()
-        scheduleAutoDismiss()
+
+        updateCard()
+        // Deliberately no automatic dismissal: a Nafha remains visible until
+        // the user hides it or until a later scheduled Nafha replaces it.
     }
 
     private fun dismissCurrentBubble() {
-        handler.removeCallbacks(autoDismiss)
         removeCard()
         hideDeleteTarget()
         if (!bubbleAttached) return
         bubble.animate().cancel()
-        bubble.animate().alpha(0f).setDuration(180L).withEndAction {
-            if (bubbleAttached) runCatching { wm.removeView(bubble) }
-            bubbleAttached = false
-        }.start()
-        // Keep next_due_at untouched: X hides only this Nafha until the user's next scheduled one.
+        bubble.animate()
+            .alpha(0f)
+            .setDuration(180L)
+            .withEndAction {
+                if (bubbleAttached) runCatching { wm.removeView(bubble) }
+                bubbleAttached = false
+            }
+            .start()
+        // next_due_at is preserved so the next scheduled Nafha can appear.
     }
 
     private fun createBubbleIfNeeded() {
         if (::bubble.isInitialized) return
+
         bubble = TextView(this).apply {
             text = "✦"
             textSize = 26f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(244, 199, 106))
-            setBackgroundResource(R.drawable.nafahat_bubble_unread_bg)
             elevation = 14f
         }
+        applyBubbleStyle()
+
         val size = dp(58)
-        val params = WindowManager.LayoutParams(size, size, overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply {
+        val params = WindowManager.LayoutParams(
+            size,
+            size,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = screenWidth() - size - dp(10)
             y = safeTop() + dp(90)
         }
         bubbleParams = params
 
-        var startX = 0; var startY = 0; var touchX = 0f; var touchY = 0f; var moved = false
+        var startX = 0
+        var startY = 0
+        var touchX = 0f
+        var touchY = 0f
+        var moved = false
+
         bubble.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    snapAnimator?.cancel(); handler.removeCallbacks(autoDismiss)
-                    startX = params.x; startY = params.y; touchX = event.rawX; touchY = event.rawY; moved = false
-                    bubble.alpha = 1f; true
+                    snapAnimator?.cancel()
+                    startX = params.x
+                    startY = params.y
+                    touchX = event.rawX
+                    touchY = event.rawY
+                    moved = false
+                    bubble.alpha = 1f
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (event.rawX - touchX).toInt(); val dy = (event.rawY - touchY).toInt()
-                    if (abs(dx) > dp(4) || abs(dy) > dp(4)) { if (!moved) showDeleteTarget(); moved = true }
+                    val dx = (event.rawX - touchX).toInt()
+                    val dy = (event.rawY - touchY).toInt()
+                    if (abs(dx) > dp(4) || abs(dy) > dp(4)) {
+                        if (!moved) showDeleteTarget()
+                        moved = true
+                    }
                     params.x = (startX + dx).coerceIn(0, screenWidth() - size)
                     params.y = (startY + dy).coerceIn(safeTop(), safeBottom() - size)
                     if (bubbleAttached) wm.updateViewLayout(bubble, params)
-                    updateDeleteTargetState(event.rawX, event.rawY); true
+                    updateDeleteTargetState(event.rawX, event.rawY)
+                    true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     val shouldDismiss = moved && isInsideDeleteTarget(event.rawX, event.rawY)
                     hideDeleteTarget()
                     when {
                         shouldDismiss -> dismissCurrentBubble()
-                        !moved -> { markRead(); toggleCard() }
-                        else -> { snapToNearestEdge(); scheduleAutoDismiss() }
-                    }; true
+                        !moved -> {
+                            markRead()
+                            toggleCard()
+                        }
+                        else -> snapToNearestEdge()
+                    }
+                    true
                 }
                 else -> false
             }
         }
     }
 
+    private fun applyBubbleStyle() {
+        if (!::bubble.isInitialized) return
+        bubble.setTextColor(if (isDarkTheme()) GOLD else GOLD_DARK)
+        bubble.background = bubbleBackground(unread)
+    }
+
+    private fun bubbleBackground(isUnread: Boolean): GradientDrawable {
+        val dark = isDarkTheme()
+        return GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (dark) DARK_BUBBLE else LIGHT_SURFACE)
+            val stroke = when {
+                isUnread && dark -> GOLD
+                isUnread -> GOLD_DARK
+                dark -> DARK_BORDER
+                else -> LIGHT_BORDER
+            }
+            setStroke(dp(if (isUnread) 3 else 1), stroke)
+        }
+    }
+
     private fun snapToNearestEdge() {
         val params = bubbleParams ?: return
         if (!bubbleAttached) return
-        val size = dp(58); val edge = dp(10); val midpoint = screenWidth() / 2
-        val targetX = if (params.x + size / 2 < midpoint) edge else screenWidth() - size - edge
+        val size = dp(58)
+        val edge = dp(10)
+        val midpoint = screenWidth() / 2
+        val targetX = if (params.x + size / 2 < midpoint) {
+            edge
+        } else {
+            screenWidth() - size - edge
+        }
         params.y = params.y.coerceIn(safeTop(), safeBottom() - size)
         snapAnimator?.cancel()
         snapAnimator = ValueAnimator.ofInt(params.x, targetX).apply {
-            duration = 260L; interpolator = AccelerateDecelerateInterpolator()
-            addUpdateListener { animator -> params.x = animator.animatedValue as Int; if (bubbleAttached) runCatching { wm.updateViewLayout(bubble, params) } }
+            duration = 260L
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animator ->
+                params.x = animator.animatedValue as Int
+                if (bubbleAttached) runCatching { wm.updateViewLayout(bubble, params) }
+            }
             start()
         }
     }
 
     private fun showDeleteTarget() {
         if (deleteTarget != null) return
-        val bg = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.rgb(145, 35, 45)); setStroke(dp(2), Color.argb(220, 244, 199, 106)) }
-        val view = TextView(this).apply { text = "×"; textSize = 30f; gravity = Gravity.CENTER; setTextColor(Color.WHITE); background = bg; elevation = 18f; alpha = .94f }
-        val size = dp(64)
-        val p = WindowManager.LayoutParams(size, size, overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL; y = navigationBarHeight() + dp(18)
+        val dark = isDarkTheme()
+        val background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(if (dark) Color.rgb(145, 35, 45) else Color.rgb(180, 45, 55))
+            setStroke(dp(2), if (dark) GOLD else GOLD_DARK)
         }
-        deleteTarget = view; wm.addView(view, p)
+        val view = TextView(this).apply {
+            text = "×"
+            textSize = 30f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            this.background = background
+            elevation = 18f
+            alpha = .94f
+        }
+        val size = dp(64)
+        val params = WindowManager.LayoutParams(
+            size,
+            size,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = navigationBarHeight() + dp(18)
+        }
+        deleteTarget = view
+        wm.addView(view, params)
     }
 
     private fun updateDeleteTargetState(rawX: Float, rawY: Float) {
-        deleteTarget?.apply { val inside = isInsideDeleteTarget(rawX, rawY); scaleX = if (inside) 1.18f else 1f; scaleY = if (inside) 1.18f else 1f; alpha = if (inside) 1f else .88f }
+        deleteTarget?.apply {
+            val inside = isInsideDeleteTarget(rawX, rawY)
+            scaleX = if (inside) 1.18f else 1f
+            scaleY = if (inside) 1.18f else 1f
+            alpha = if (inside) 1f else .88f
+        }
     }
 
     private fun isInsideDeleteTarget(rawX: Float, rawY: Float): Boolean {
-        val centerX = screenWidth() / 2f; val centerY = screenHeight() - navigationBarHeight() - dp(18) - dp(32)
-        return hypot((rawX - centerX).toDouble(), (rawY - centerY).toDouble()) <= dp(82)
+        val centerX = screenWidth() / 2f
+        val centerY = screenHeight() - navigationBarHeight() - dp(18) - dp(32)
+        return hypot(
+            (rawX - centerX).toDouble(),
+            (rawY - centerY).toDouble(),
+        ) <= dp(82)
     }
 
-    private fun hideDeleteTarget() { deleteTarget?.let { runCatching { wm.removeView(it) } }; deleteTarget = null }
-    private fun markRead() { bubble.setBackgroundResource(R.drawable.nafahat_bubble_bg); bubble.alpha = 1f }
+    private fun hideDeleteTarget() {
+        deleteTarget?.let { runCatching { wm.removeView(it) } }
+        deleteTarget = null
+    }
+
+    private fun markRead() {
+        unread = false
+        applyBubbleStyle()
+        bubble.alpha = 1f
+    }
 
     private fun toggleCard() {
-        if (card != null) { removeCard(); scheduleAutoDismiss(); return }
-        handler.removeCallbacks(autoDismiss)
-        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(16), dp(18), dp(14)); setBackgroundResource(R.drawable.nafahat_card_bg); elevation = 18f }
-        val title = textView("nafha_title", 13f, Color.rgb(244, 199, 106), true)
-        val body = textView("nafha_body", 17f, Color.WHITE).apply { setPadding(0, dp(10), 0, dp(7)); setLineSpacing(0f, 1.25f) }
-        val source = textView("nafha_source", 11f, Color.rgb(244, 199, 106))
-        val detailTitle = textView("nafha_detail_title", 11f, Color.rgb(169, 176, 181), true).apply { setPadding(0, dp(13), 0, dp(3)) }
-        val detail = textView("nafha_detail", 13f, Color.WHITE).apply { setLineSpacing(0f, 1.18f) }
-        val extraTitle = textView("nafha_extra_title", 11f, Color.rgb(169, 176, 181), true).apply { setPadding(0, dp(11), 0, dp(3)) }
-        val extra = textView("nafha_extra", 12f, Color.WHITE).apply { setLineSpacing(0f, 1.15f) }
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END; setPadding(0, dp(12), 0, 0) }
-        val next = Button(this).apply { text = "التالي"; setOnClickListener { selectContextualItem(false); markRead(); updateCard(); scheduleNextFromNow() } }
-        val hide = Button(this).apply { text = "إخفاء"; setOnClickListener { dismissCurrentBubble() } }
-        actions.addView(next); actions.addView(hide)
-        container.addView(title); container.addView(body); container.addView(source); container.addView(detailTitle); container.addView(detail); container.addView(extraTitle); container.addView(extra); container.addView(actions)
-
-        val bp = bubbleParams ?: return; val cardWidth = dp(318); val size = dp(58); val onLeft = bp.x + size / 2 < screenWidth() / 2
-        val desiredX = if (onLeft) bp.x + size + dp(8) else bp.x - cardWidth - dp(8)
-        val p = WindowManager.LayoutParams(cardWidth, WindowManager.LayoutParams.WRAP_CONTENT, overlayType(), WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT).apply {
-            gravity = Gravity.TOP or Gravity.START; x = desiredX.coerceIn(dp(8), screenWidth() - cardWidth - dp(8)); y = bp.y.coerceIn(safeTop() + dp(4), (safeBottom() - dp(330)).coerceAtLeast(safeTop() + dp(4)))
+        if (card != null) {
+            removeCard()
+            return
         }
-        card = container; wm.addView(container, p); updateCard()
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(16), dp(18), dp(14))
+            background = cardBackground()
+            elevation = 18f
+        }
+
+        val title = textView("nafha_title", 13f, true)
+        val body = textView("nafha_body", 17f, true).apply {
+            setPadding(0, dp(10), 0, dp(7))
+            setLineSpacing(0f, 1.25f)
+        }
+        val source = textView("nafha_source", 11f, false)
+        val detailTitle = textView("nafha_detail_title", 11f, true).apply {
+            setPadding(0, dp(13), 0, dp(3))
+        }
+        val detail = textView("nafha_detail", 13f, false).apply {
+            setLineSpacing(0f, 1.18f)
+        }
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END
+            setPadding(0, dp(12), 0, 0)
+        }
+        val next = Button(this).apply {
+            tag = "nafha_next"
+            setOnClickListener {
+                selectNextItem()
+                unread = false
+                applyBubbleStyle()
+                updateCard()
+                scheduleNextFromNow()
+            }
+        }
+        val hide = Button(this).apply {
+            tag = "nafha_hide"
+            setOnClickListener { dismissCurrentBubble() }
+        }
+        actions.addView(next)
+        actions.addView(hide)
+
+        container.addView(title)
+        container.addView(body)
+        container.addView(source)
+        container.addView(detailTitle)
+        container.addView(detail)
+        container.addView(actions)
+
+        val bp = bubbleParams ?: return
+        val cardWidth = dp(318)
+        val bubbleSize = dp(58)
+        val onLeft = bp.x + bubbleSize / 2 < screenWidth() / 2
+        val desiredX = if (onLeft) {
+            bp.x + bubbleSize + dp(8)
+        } else {
+            bp.x - cardWidth - dp(8)
+        }
+        val params = WindowManager.LayoutParams(
+            cardWidth,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            overlayType(),
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = desiredX.coerceIn(dp(8), screenWidth() - cardWidth - dp(8))
+            y = bp.y.coerceIn(
+                safeTop() + dp(4),
+                (safeBottom() - dp(330)).coerceAtLeast(safeTop() + dp(4)),
+            )
+        }
+
+        card = container
+        wm.addView(container, params)
+        updateCard()
     }
 
-    private fun textView(tagValue: String, size: Float, color: Int, bold: Boolean = false) = TextView(this).apply {
-        tag = tagValue; textSize = size; setTextColor(color); gravity = Gravity.END; textDirection = View.TEXT_DIRECTION_RTL; if (bold) setTypeface(typeface, Typeface.BOLD)
-    }
+    private fun textView(tagValue: String, size: Float, bold: Boolean): TextView =
+        TextView(this).apply {
+            tag = tagValue
+            textSize = size
+            if (bold) setTypeface(typeface, Typeface.BOLD)
+        }
 
     private fun updateCard() {
-        val c = card ?: return; val item = items[index]
-        c.findViewWithTag<TextView>("nafha_title")?.text = item.kind
-        c.findViewWithTag<TextView>("nafha_body")?.text = item.text
-        c.findViewWithTag<TextView>("nafha_source")?.text = item.source
-        c.findViewWithTag<TextView>("nafha_detail_title")?.text = item.detailTitle
-        c.findViewWithTag<TextView>("nafha_detail")?.text = item.detail
-        val extraTitle = c.findViewWithTag<TextView>("nafha_extra_title"); val extra = c.findViewWithTag<TextView>("nafha_extra")
-        if (item.extraTitle.isNullOrBlank() || item.extra.isNullOrBlank()) { extraTitle?.visibility = View.GONE; extra?.visibility = View.GONE }
-        else { extraTitle?.visibility = View.VISIBLE; extra?.visibility = View.VISIBLE; extraTitle?.text = item.extraTitle; extra?.text = item.extra }
+        val container = card ?: return
+        val item = items[index]
+        val ar = isArabic()
+        val dark = isDarkTheme()
+        val primaryText = if (dark) Color.WHITE else LIGHT_TEXT
+        val secondaryText = if (dark) DARK_MUTED else LIGHT_MUTED
+        val accent = if (dark) GOLD else GOLD_DARK
+
+        container.background = cardBackground()
+
+        fun applyDirection(view: TextView?) {
+            view ?: return
+            view.gravity = if (ar) Gravity.END else Gravity.START
+            view.textDirection = if (ar) View.TEXT_DIRECTION_RTL else View.TEXT_DIRECTION_LTR
+        }
+
+        val title = container.findViewWithTag<TextView>("nafha_title")
+        val body = container.findViewWithTag<TextView>("nafha_body")
+        val source = container.findViewWithTag<TextView>("nafha_source")
+        val detailTitle = container.findViewWithTag<TextView>("nafha_detail_title")
+        val detail = container.findViewWithTag<TextView>("nafha_detail")
+        val next = container.findViewWithTag<Button>("nafha_next")
+        val hide = container.findViewWithTag<Button>("nafha_hide")
+
+        title?.text = kindLabel(item.kind, ar)
+        body?.text = if (ar) item.textAr else item.textEn
+        source?.text = if (ar) item.sourceAr else item.sourceEn
+        detailTitle?.text = if (ar) item.detailTitleAr else item.detailTitleEn
+        detail?.text = if (ar) item.detailAr else item.detailEn
+
+        title?.setTextColor(accent)
+        body?.setTextColor(primaryText)
+        source?.setTextColor(accent)
+        detailTitle?.setTextColor(secondaryText)
+        detail?.setTextColor(primaryText)
+
+        listOf(title, body, source, detailTitle, detail).forEach(::applyDirection)
+
+        next?.apply {
+            text = if (ar) "التالي" else "Next"
+            setTextColor(if (dark) DARK_BUBBLE else Color.WHITE)
+            backgroundTintList = ColorStateList.valueOf(accent)
+        }
+        hide?.apply {
+            text = if (ar) "إخفاء" else "Hide"
+            setTextColor(primaryText)
+            backgroundTintList = ColorStateList.valueOf(
+                if (dark) Color.rgb(37, 52, 71) else Color.rgb(231, 226, 216),
+            )
+        }
     }
 
-    private fun removeCard() { card?.let { runCatching { wm.removeView(it) } }; card = null }
+    private fun kindLabel(kind: String, ar: Boolean): String {
+        if (ar) return kind
+        return when (kind) {
+            "آية" -> "Verse"
+            "حديث" -> "Hadith"
+            "ذكر" -> "Dhikr"
+            else -> "Reflection"
+        }
+    }
+
+    private fun cardBackground(): GradientDrawable {
+        val dark = isDarkTheme()
+        val colors = if (dark) {
+            intArrayOf(Color.rgb(11, 31, 58), Color.rgb(16, 40, 70))
+        } else {
+            intArrayOf(Color.rgb(255, 255, 255), Color.rgb(247, 244, 238))
+        }
+        return GradientDrawable(GradientDrawable.Orientation.TL_BR, colors).apply {
+            cornerRadius = dp(22).toFloat()
+            setStroke(dp(1), if (dark) DARK_BORDER else LIGHT_BORDER)
+        }
+    }
+
+    private fun removeCard() {
+        card?.let { runCatching { wm.removeView(it) } }
+        card = null
+    }
+
+    private fun isArabic(): Boolean {
+        val language = HomeWidgetPlugin.getData(this)
+            .getString("widget_language", "ar")
+            ?: "ar"
+        return language.lowercase().startsWith("ar")
+    }
+
+    private fun isDarkTheme(): Boolean {
+        return when (themeMode()) {
+            "dark" -> true
+            "light" -> false
+            else -> {
+                resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+                    Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+    }
 
     private fun startForegroundNotification() {
-        val pending = PendingIntent.getActivity(this, 0, packageManager.getLaunchIntentForPackage(packageName), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        startForeground(NOTIFICATION_ID, NotificationCompat.Builder(this, CHANNEL_ID).setSmallIcon(R.mipmap.ic_launcher).setContentTitle("منيب • نفحات").setContentText("نفحات مفعلة حسب جدولك").setOngoing(true).setSilent(true).setContentIntent(pending).build())
+        val pending = PendingIntent.getActivity(
+            this,
+            0,
+            packageManager.getLaunchIntentForPackage(packageName),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val ar = isArabic()
+        startForeground(
+            NOTIFICATION_ID,
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle(if (ar) "منيب • نفحات" else "Munib • Nafahat")
+                .setContentText(
+                    if (ar) "نفحات مفعلة حسب جدولك" else "Nafahat is active on your schedule",
+                )
+                .setOngoing(true)
+                .setSilent(true)
+                .setContentIntent(pending)
+                .build(),
+        )
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL_ID, "نفحات منيب", NotificationManager.IMPORTANCE_LOW).apply { setSound(null, null); enableVibration(false) })
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Munib Nafahat",
+                    NotificationManager.IMPORTANCE_LOW,
+                ).apply {
+                    setSound(null, null)
+                    enableVibration(false)
+                },
+            )
         }
     }
 
-    private fun overlayType(): Int = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
-    private fun screenWidth() = resources.displayMetrics.widthPixels
-    private fun screenHeight() = resources.displayMetrics.heightPixels
-    private fun safeTop() = statusBarHeight() + dp(10)
-    private fun safeBottom() = screenHeight() - navigationBarHeight() - dp(12)
-    private fun statusBarHeight(): Int { val id = resources.getIdentifier("status_bar_height", "dimen", "android"); return if (id > 0) resources.getDimensionPixelSize(id) else dp(24) }
-    private fun navigationBarHeight(): Int { val id = resources.getIdentifier("navigation_bar_height", "dimen", "android"); return if (id > 0) resources.getDimensionPixelSize(id) else dp(24) }
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
+    private fun overlayType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        } else {
+            @Suppress("DEPRECATION")
+            WindowManager.LayoutParams.TYPE_PHONE
+        }
+
+    private fun screenWidth(): Int = resources.displayMetrics.widthPixels
+    private fun screenHeight(): Int = resources.displayMetrics.heightPixels
+    private fun safeTop(): Int = statusBarHeight() + dp(10)
+    private fun safeBottom(): Int = screenHeight() - navigationBarHeight() - dp(12)
+
+    private fun statusBarHeight(): Int {
+        val id = resources.getIdentifier("status_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else dp(24)
+    }
+
+    private fun navigationBarHeight(): Int {
+        val id = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else dp(24)
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
+
+    private companion object Colors {
+        val GOLD: Int = Color.rgb(244, 199, 106)
+        val GOLD_DARK: Int = Color.rgb(157, 112, 30)
+        val DARK_BUBBLE: Int = Color.rgb(11, 31, 58)
+        val DARK_BORDER: Int = Color.rgb(62, 82, 106)
+        val DARK_MUTED: Int = Color.rgb(169, 176, 181)
+        val LIGHT_SURFACE: Int = Color.rgb(247, 244, 238)
+        val LIGHT_BORDER: Int = Color.rgb(218, 211, 199)
+        val LIGHT_TEXT: Int = Color.rgb(29, 35, 42)
+        val LIGHT_MUTED: Int = Color.rgb(99, 105, 113)
+    }
 }
