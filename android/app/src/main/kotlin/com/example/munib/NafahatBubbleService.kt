@@ -93,8 +93,15 @@ class NafahatBubbleService : Service() {
         startForegroundNotification()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         createBubbleIfNeeded()
-        presentDueContent(firstRun = true)
-        scheduleNextWakeup()
+
+        val now = System.currentTimeMillis()
+        val regularDue = prefs().getLong(KEY_NEXT_DUE_AT, 0L)
+        val specialDue = dueAzkarCategory(now) != null
+        when {
+            regularDue <= 0L -> presentDueContent(firstRun = true)
+            regularDue <= now || specialDue -> presentDueContent(firstRun = false)
+            else -> scheduleNextWakeup()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -506,17 +513,37 @@ class NafahatBubbleService : Service() {
         }
     }
 
+    private fun deleteTargetCenter(): Pair<Float, Float> {
+        val target = deleteTarget
+        if (target != null && target.width > 0 && target.height > 0) {
+            val position = IntArray(2)
+            runCatching { target.getLocationOnScreen(position) }
+            if (position[0] != 0 || position[1] != 0) {
+                return (position[0] + target.width / 2f) to
+                    (position[1] + target.height / 2f)
+            }
+        }
+        return screenWidth() / 2f to
+            (screenHeight() - navigationBarHeight() - dp(18) - dp(38).toFloat())
+    }
+
     private fun magnetizedPosition(x: Int, y: Int, size: Int): Pair<Int, Int> {
         if (deleteTarget == null) return x to y
         val centerX = x + size / 2f
         val centerY = y + size / 2f
-        val targetX = screenWidth() / 2f
-        val targetY = deleteTargetCenterY()
+        val target = deleteTargetCenter()
+        val targetX = target.first
+        val targetY = target.second
         val distance = hypot((centerX - targetX).toDouble(), (centerY - targetY).toDouble())
-        val magnetRadius = dp(130).toDouble()
-        if (distance > magnetRadius) return x to y
+        val lockRadius = dp(62).toDouble()
+        if (distance <= lockRadius) {
+            return (targetX - size / 2f).toInt().coerceIn(0, screenWidth() - size) to
+                (targetY - size / 2f).toInt().coerceIn(safeTop(), safeBottom() - size)
+        }
 
-        val strength = ((magnetRadius - distance) / magnetRadius).coerceIn(0.18, 0.72)
+        val magnetRadius = dp(150).toDouble()
+        if (distance > magnetRadius) return x to y
+        val strength = ((magnetRadius - distance) / magnetRadius).coerceIn(0.20, 0.78)
         val snappedCenterX = centerX + ((targetX - centerX) * strength).toFloat()
         val snappedCenterY = centerY + ((targetY - centerY) * strength).toFloat()
         return (snappedCenterX - size / 2f).toInt().coerceIn(0, screenWidth() - size) to
@@ -629,11 +656,12 @@ class NafahatBubbleService : Service() {
             val inside = isFullyInsideDeleteTarget(params, bubbleSize)
             val bubbleCenterX = params.x + bubbleSize / 2f
             val bubbleCenterY = params.y + bubbleSize / 2f
+            val target = deleteTargetCenter()
             val distance = hypot(
-                (bubbleCenterX - screenWidth() / 2f).toDouble(),
-                (bubbleCenterY - deleteTargetCenterY()).toDouble(),
+                (bubbleCenterX - target.first).toDouble(),
+                (bubbleCenterY - target.second).toDouble(),
             )
-            val near = distance <= dp(130)
+            val near = distance <= dp(150)
             animate().cancel()
             animate()
                 .scaleX(if (inside) 1.18f else if (near) 1.08f else 1f)
@@ -653,14 +681,12 @@ class NafahatBubbleService : Service() {
         val maxCenterDistance = (targetRadius - bubbleRadius).coerceAtLeast(0f)
         val centerX = params.x + bubbleRadius
         val centerY = params.y + bubbleRadius
+        val target = deleteTargetCenter()
         return hypot(
-            (centerX - screenWidth() / 2f).toDouble(),
-            (centerY - deleteTargetCenterY()).toDouble(),
+            (centerX - target.first).toDouble(),
+            (centerY - target.second).toDouble(),
         ) <= maxCenterDistance
     }
-
-    private fun deleteTargetCenterY(): Float =
-        screenHeight() - navigationBarHeight() - dp(18) - dp(38).toFloat()
 
     private fun hideDeleteTarget() {
         deleteTarget?.let { runCatching { wm.removeView(it) } }

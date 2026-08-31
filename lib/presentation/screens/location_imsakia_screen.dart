@@ -93,14 +93,27 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
       if (result.days.isEmpty) throw Exception('empty_times');
       final prayers = result.days.map(PrayerDay.fromJson).toList();
       if (!mounted) return;
-      await context.read<PrayerProvider>().addLocationImsakia(
-            name: place.city,
-            country: place.country,
-            latitude: place.latitude,
-            longitude: place.longitude,
-            timezone: result.timezone,
-            prayers: prayers,
-          );
+
+      final provider = context.read<PrayerProvider>();
+      final locationId =
+          '${place.latitude.toStringAsFixed(5)}:${place.longitude.toStringAsFixed(5)}';
+      try {
+        await provider.addLocationImsakia(
+          name: place.city,
+          country: place.country,
+          latitude: place.latitude,
+          longitude: place.longitude,
+          timezone: result.timezone,
+          prayers: prayers,
+        );
+      } catch (_) {
+        // The location is persisted before widget/notification synchronization.
+        // If a later platform sync fails, do not tell the user the city failed
+        // to load when it was already saved successfully.
+        final saved = provider.savedLocations.any((item) => item.id == locationId);
+        if (!saved) rethrow;
+      }
+
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (_) {
