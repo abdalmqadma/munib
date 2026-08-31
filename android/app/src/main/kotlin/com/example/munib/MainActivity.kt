@@ -13,6 +13,7 @@ class MainActivity : FlutterActivity() {
     private val adhanChannelName = "com.example.munib/adhan"
     private val prefsName = "nafahat_prefs"
     private var pendingAzkarCategory: String? = null
+    private var startNafahatAfterOverlayPermission = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -21,19 +22,29 @@ class MainActivity : FlutterActivity() {
         configureAdhanChannel(flutterEngine)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (!startNafahatAfterOverlayPermission) return
+        startNafahatAfterOverlayPermission = false
+        if (canDrawOverlays()) startNafahatService()
+    }
+
     private fun configureNafahatChannel(flutterEngine: FlutterEngine) {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, nafahatChannelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "canDrawOverlays" -> result.success(canDrawOverlays())
                     "requestOverlayPermission" -> {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !canDrawOverlays()) {
+                            startNafahatAfterOverlayPermission = true
                             startActivity(
                                 Intent(
                                     Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                     Uri.parse("package:$packageName"),
                                 ),
                             )
+                        } else {
+                            startNafahatService()
                         }
                         result.success(true)
                     }
@@ -158,10 +169,15 @@ class MainActivity : FlutterActivity() {
             result.error("overlay_permission", "Overlay permission is required", null)
             return
         }
+        startNafahatService()
+        result.success(true)
+    }
+
+    private fun startNafahatService() {
+        if (NafahatBubbleService.isRunning) return
         val intent = Intent(this, NafahatBubbleService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
-        result.success(true)
     }
 
     private fun readNafahatSettings(): Map<String, Any> {

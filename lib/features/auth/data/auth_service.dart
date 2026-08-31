@@ -97,7 +97,15 @@ class AuthService {
   Future<void> signOutUnverifiedPasswordUser() async {
     final user = _auth.currentUser;
     if (user == null || !isPasswordUser(user)) return;
-    await user.reload();
+
+    // Splash must never depend on the network being available. If Firebase
+    // cannot refresh quickly, keep the cached session and let the app open.
+    try {
+      await user.reload().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return;
+    }
+
     final refreshed = _auth.currentUser;
     if (refreshed != null && !refreshed.emailVerified) {
       await _auth.signOut();

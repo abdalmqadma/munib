@@ -78,15 +78,24 @@ internal object PrayerAlarmScheduler {
                         pending,
                     )
                 }
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
                     alarmManager.setAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP,
                         spec.atMillis,
                         pending,
                     )
                 }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                    // Android 6–11 do not require the Android 12 exact-alarm
+                    // special access, so keep prayer alarms truly exact here.
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        spec.atMillis,
+                        pending,
+                    )
+                }
                 else -> {
-                    alarmManager.set(AlarmManager.RTC_WAKEUP, spec.atMillis, pending)
+                    alarmManager.setExact(AlarmManager.RTC_WAKEUP, spec.atMillis, pending)
                 }
             }
         }

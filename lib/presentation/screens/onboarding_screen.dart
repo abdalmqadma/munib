@@ -39,11 +39,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     final pages = [
       _OnboardingPage(
-        icon: Icons.document_scanner_outlined,
-        title: isEn ? 'Munib reads your Imsakia' : 'الذكاء الاصطناعي يقرأ إمساكيتك',
+        icon: Icons.my_location_rounded,
+        title: isEn
+            ? 'Prayer times for your location'
+            : 'مواقيت دقيقة حسب موقعك',
         body: isEn
-            ? 'Upload a clear Imsakia image and Munib will extract prayer times for you.'
-            : 'ارفع صورة واضحة للإمساكية وسيستخرج منيب أوقات الصلاة تلقائياً.',
+            ? 'Use your location or search for any city to load and save its prayer times in Munib.'
+            : 'استخدم موقعك أو ابحث عن أي مدينة لتحميل مواقيت الصلاة وحفظها في منيب.',
       ),
       _OnboardingPage(
         icon: Icons.widgets_outlined,

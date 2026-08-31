@@ -111,13 +111,69 @@ class PrayerTimesService {
     DateTime? month,
     String? countryCode,
   }) async {
-    final target = month ?? DateTime.now();
     final profile = PrayerCalculationProfile.forLocation(
       latitude: latitude,
       longitude: longitude,
       countryCode: countryCode,
     );
 
+    if (month != null) {
+      return _fetchMonth(
+        latitude: latitude,
+        longitude: longitude,
+        month: month,
+        profile: profile,
+      );
+    }
+
+    final currentMonth = DateTime.now();
+    final first = await _fetchMonth(
+      latitude: latitude,
+      longitude: longitude,
+      month: currentMonth,
+      profile: profile,
+    );
+
+    // Keep a bridge into the next calendar month so the last prayer of the
+    // month can still resolve to next month's Fajr and notifications/widgets
+    // do not suddenly run out of schedule at midnight on the 1st.
+    final nextMonth = DateTime(currentMonth.year, currentMonth.month + 1, 1);
+    LocationPrayerTimesResult? second;
+    try {
+      second = await _fetchMonth(
+        latitude: latitude,
+        longitude: longitude,
+        month: nextMonth,
+        profile: profile,
+      );
+    } catch (_) {
+      // Current-month data is still useful if the optional look-ahead request
+      // temporarily fails. A later refresh can extend the schedule.
+    }
+
+    if (second == null || second.days.isEmpty) return first;
+
+    final byDate = <String, Map<String, dynamic>>{};
+    for (final day in [...first.days, ...second.days]) {
+      final date = (day['date'] ?? '').toString();
+      if (date.isNotEmpty) byDate[date] = day;
+    }
+    final days = byDate.values.toList()
+      ..sort((a, b) =>
+          (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+
+    return LocationPrayerTimesResult(
+      days: days,
+      timezone: first.timezone.isNotEmpty ? first.timezone : second.timezone,
+    );
+  }
+
+  Future<LocationPrayerTimesResult> _fetchMonth({
+    required double latitude,
+    required double longitude,
+    required DateTime month,
+    required PrayerCalculationProfile profile,
+  }) async {
     final query = <String, String>{
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
@@ -128,7 +184,7 @@ class PrayerTimesService {
 
     final uri = Uri.https(
       'api.aladhan.com',
-      '/v1/calendar/${target.year}/${target.month}',
+      '/v1/calendar/${month.year}/${month.month}',
       query,
     );
 

@@ -41,7 +41,13 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
 
-    await AuthService().signOutUnverifiedPasswordUser();
+    try {
+      await AuthService().signOutUnverifiedPasswordUser();
+    } catch (_) {
+      // Authentication cleanup is best-effort. Never trap the user on splash
+      // because Firebase or the network is temporarily unavailable.
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final isFirstRun = prefs.getBool('isFirstRun') ?? true;
     final lang = prefs.getString('language');
@@ -147,12 +153,30 @@ class _MunibVectorPainter extends CustomPainter {
   double _sin(double x) {
     // The painter only uses multiples of 45 degrees; this avoids another
     // dependency while keeping the mark deterministic.
-    const values = [0.0, .70710678, 1.0, .70710678, 0.0, -.70710678, -1.0, -.70710678];
+    const values = [
+      0.0,
+      .70710678,
+      1.0,
+      .70710678,
+      0.0,
+      -.70710678,
+      -1.0,
+      -.70710678,
+    ];
     return values[((x / (3.141592653589793 / 4)).round()) % 8];
   }
 
   double _cos(double x) {
-    const values = [1.0, .70710678, 0.0, -.70710678, -1.0, -.70710678, 0.0, .70710678];
+    const values = [
+      1.0,
+      .70710678,
+      0.0,
+      -.70710678,
+      -1.0,
+      -.70710678,
+      0.0,
+      .70710678,
+    ];
     return values[((x / (3.141592653589793 / 4)).round()) % 8];
   }
 
