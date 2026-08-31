@@ -98,20 +98,28 @@ class PrayerProvider with ChangeNotifier {
       currentCity = primary.label;
       await _savedLocationsStore.setActiveLocationId(primary.id);
       await prefs.setString('currentCity', currentCity);
-      await WidgetService.saveLocation(primary.name);
+      try {
+        await WidgetService.saveLocation(primary.name);
+      } catch (_) {}
       await _applyPrayers(primary.prayers);
     } else {
       _activeLocationId = null;
       _activeTimezone = '';
       await _savedLocationsStore.setActiveLocationId(null);
       await _loadFromHive();
-      await WidgetService.saveLocation(currentCity == 'غير محدد' ? '' : currentCity);
+      try {
+        await WidgetService.saveLocation(
+          currentCity == 'غير محدد' ? '' : currentCity,
+        );
+      } catch (_) {}
     }
 
-    await WidgetService.savePreferences(
-      languageCode: languageCode,
-      use24HourFormat: use24HourFormat,
-    );
+    try {
+      await WidgetService.savePreferences(
+        languageCode: languageCode,
+        use24HourFormat: use24HourFormat,
+      );
+    } catch (_) {}
     _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
@@ -156,40 +164,52 @@ class PrayerProvider with ChangeNotifier {
     }
   }
 
+  List<PrayerDay> _detachedPrayers(Iterable<PrayerDay> prayers) =>
+      prayers.map((day) => PrayerDay.fromJson(day.toJson())).toList();
+
   Future<void> _loadFromHive() async {
     final box = await Hive.openBox<PrayerDay>('prayers');
-    _monthlyPrayers = box.values.toList();
-    await WidgetService.savePrayerSchedule(
-      _monthlyPrayers,
-      timezone: _activeTimezone,
-    );
+    _monthlyPrayers = _detachedPrayers(box.values);
+    try {
+      await WidgetService.savePrayerSchedule(
+        _monthlyPrayers,
+        timezone: _activeTimezone,
+      );
+    } catch (_) {}
     _updateCurrentStatus(forceWidgetUpdate: true);
     await _syncNotifications();
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
+    final detached = _detachedPrayers(prayers);
     final activeId = _activeLocationId;
     if (activeId != null) {
       final index = _savedLocations.indexWhere((e) => e.id == activeId);
       if (index >= 0) {
         _savedLocations[index] = _savedLocations[index].copyWith(
-          prayers: List<PrayerDay>.from(prayers),
+          prayers: _detachedPrayers(detached),
         );
         await _persistSavedLocations();
       }
     }
-    await _applyPrayers(prayers);
+    await _applyPrayers(detached);
   }
 
   Future<void> _applyPrayers(List<PrayerDay> prayers) async {
-    _monthlyPrayers = List<PrayerDay>.from(prayers);
+    final detached = _detachedPrayers(prayers);
+    _monthlyPrayers = detached;
+
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
-    await box.addAll(_monthlyPrayers);
-    await WidgetService.savePrayerSchedule(
-      _monthlyPrayers,
-      timezone: _activeTimezone,
-    );
+    await box.addAll(_detachedPrayers(detached));
+
+    try {
+      await WidgetService.savePrayerSchedule(
+        _monthlyPrayers,
+        timezone: _activeTimezone,
+      );
+    } catch (_) {}
+
     _updateCurrentStatus(forceWidgetUpdate: true);
     await _syncNotifications();
     notifyListeners();
@@ -215,17 +235,13 @@ class PrayerProvider with ChangeNotifier {
       latitude: latitude,
       longitude: longitude,
       timezone: timezone,
-      prayers: List<PrayerDay>.from(prayers),
+      prayers: _detachedPrayers(prayers),
     );
 
-    final index = _savedLocations.indexWhere((e) => e.id == id);
-    if (index >= 0) {
-      _savedLocations[index] = item;
-    } else {
-      _savedLocations.add(item);
-    }
+    _savedLocations.removeWhere((e) => e.id == id);
+    _savedLocations.insert(0, item);
 
-    await _activateLocation(_savedLocations.first, persistLocations: true);
+    await _activateLocation(item, persistLocations: true);
   }
 
   Future<void> _snapshotCurrentImsakiaIfNeeded() async {
@@ -242,7 +258,7 @@ class PrayerProvider with ChangeNotifier {
       latitude: 0,
       longitude: 0,
       timezone: _activeTimezone,
-      prayers: List<PrayerDay>.from(_monthlyPrayers),
+      prayers: _detachedPrayers(_monthlyPrayers),
     ));
     _activeLocationId ??= id;
     await _persistSavedLocations();
@@ -267,11 +283,16 @@ class PrayerProvider with ChangeNotifier {
     _activeLocationId = item.id;
     _activeTimezone = item.timezone;
     currentCity = item.label;
-    await WidgetService.saveLocation(item.name);
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('currentCity', currentCity);
     await _savedLocationsStore.setActiveLocationId(item.id);
     if (persistLocations) await _persistSavedLocations();
+
+    try {
+      await WidgetService.saveLocation(item.name);
+    } catch (_) {}
+
     await _applyPrayers(item.prayers);
   }
 
@@ -299,10 +320,12 @@ class PrayerProvider with ChangeNotifier {
 
     final box = await Hive.openBox<PrayerDay>('prayers');
     await box.clear();
-    await WidgetService.clearPrayerData(
-      languageCode: languageCode,
-      use24HourFormat: use24HourFormat,
-    );
+    try {
+      await WidgetService.clearPrayerData(
+        languageCode: languageCode,
+        use24HourFormat: use24HourFormat,
+      );
+    } catch (_) {}
     await _syncNotifications();
     notifyListeners();
   }
@@ -317,10 +340,12 @@ class PrayerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language', normalized);
     language = normalized == 'en' ? 'English' : 'العربية';
-    await WidgetService.savePreferences(
-      languageCode: languageCode,
-      use24HourFormat: use24HourFormat,
-    );
+    try {
+      await WidgetService.savePreferences(
+        languageCode: languageCode,
+        use24HourFormat: use24HourFormat,
+      );
+    } catch (_) {}
     _updateCurrentStatus(forceWidgetUpdate: true);
     await _syncNotifications();
     notifyListeners();
@@ -337,10 +362,12 @@ class PrayerProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use24HourFormat', value);
     use24HourFormat = value;
-    await WidgetService.savePreferences(
-      languageCode: languageCode,
-      use24HourFormat: use24HourFormat,
-    );
+    try {
+      await WidgetService.savePreferences(
+        languageCode: languageCode,
+        use24HourFormat: use24HourFormat,
+      );
+    } catch (_) {}
     _updateCurrentStatus(forceWidgetUpdate: true);
     notifyListeners();
   }
@@ -531,7 +558,9 @@ class PrayerProvider with ChangeNotifier {
       await prefs.setString(key, value);
       if (key == 'currentCity') {
         currentCity = value;
-        await WidgetService.saveLocation(value);
+        try {
+          await WidgetService.saveLocation(value);
+        } catch (_) {}
       }
     }
     notifyListeners();
@@ -552,8 +581,17 @@ class PrayerProvider with ChangeNotifier {
         eveningAzkarMinuteOfDay: _eveningAzkarMinuteOfDay,
       );
 
-  Future<void> _syncNotifications() =>
-      NotificationService.syncSchedule(_monthlyPrayers, _notificationConfig);
+  Future<void> _syncNotifications() async {
+    try {
+      await NotificationService.syncSchedule(
+        _monthlyPrayers,
+        _notificationConfig,
+      );
+    } catch (_) {
+      // Prayer data must remain usable even if Android notification scheduling
+      // or a platform bridge temporarily fails.
+    }
+  }
 
   Duration timeUntilPrayer(String prayerName) =>
       PrayerTimeCalculator.timeUntilPrayer(
