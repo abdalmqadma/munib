@@ -36,7 +36,7 @@ class PlaceSearchService {
     final response = await http.get(
       uri,
       headers: const {
-        'User-Agent': 'MuneebPrayerApp/1.0 (global imsakia location search)',
+        'User-Agent': 'MunibPrayerApp/1.0 (global imsakia location search)',
         'Accept': 'application/json',
       },
     ).timeout(const Duration(seconds: 15));
@@ -48,7 +48,8 @@ class PlaceSearchService {
     final decoded = jsonDecode(response.body);
     if (decoded is! List) return const [];
 
-    final seen = <String>{};
+    final seenCoordinates = <String>{};
+    final seenPlaces = <String>{};
     final results = <MunibPlaceSearchResult>[];
     for (final raw in decoded) {
       if (raw is! Map) continue;
@@ -77,12 +78,26 @@ class PlaceSearchService {
         'state_district',
         'state',
       ]);
+      final region = firstNonEmpty([
+        'state_district',
+        'state',
+        'county',
+      ]);
       final country = (address['country'] ?? '').toString().trim();
-      final countryCode = (address['country_code'] ?? '').toString().trim().toUpperCase();
+      final countryCode =
+          (address['country_code'] ?? '').toString().trim().toUpperCase();
       final display = (map['display_name'] ?? '').toString().trim();
       final label = [city, country].where((e) => e.isNotEmpty).join(', ');
-      final key = '${lat.toStringAsFixed(4)},${lon.toStringAsFixed(4)}';
-      if (!seen.add(key)) continue;
+
+      final coordinateKey =
+          '${lat.toStringAsFixed(4)},${lon.toStringAsFixed(4)}';
+      if (!seenCoordinates.add(coordinateKey)) continue;
+
+      final placeKey = [city, region, countryCode.isNotEmpty ? countryCode : country]
+          .map((part) => part.trim().toLowerCase())
+          .where((part) => part.isNotEmpty)
+          .join('|');
+      if (placeKey.isNotEmpty && !seenPlaces.add(placeKey)) continue;
 
       results.add(MunibPlaceSearchResult(
         displayName: display.isNotEmpty ? display : label,
