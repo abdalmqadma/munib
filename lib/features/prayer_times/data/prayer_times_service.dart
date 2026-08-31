@@ -46,7 +46,10 @@ class PrayerCalculationProfile {
   Map<String, int> get tuneOffsets {
     final raw = tune;
     if (raw == null || raw.trim().isEmpty) return const {};
-    final values = raw.split(',').map((value) => int.tryParse(value.trim()) ?? 0).toList();
+    final values = raw
+        .split(',')
+        .map((value) => int.tryParse(value.trim()) ?? 0)
+        .toList();
     if (values.length < 8) return const {};
     return {
       'fajr': values[1],
@@ -230,7 +233,8 @@ class PrayerTimesService {
       final item = Map<String, dynamic>.from(raw);
       final timings = Map<String, dynamic>.from(item['timings'] as Map? ?? {});
       final dateMap = Map<String, dynamic>.from(item['date'] as Map? ?? {});
-      final gregorian = Map<String, dynamic>.from(dateMap['gregorian'] as Map? ?? {});
+      final gregorian =
+          Map<String, dynamic>.from(dateMap['gregorian'] as Map? ?? {});
       final meta = Map<String, dynamic>.from(item['meta'] as Map? ?? {});
 
       if (timezone.isEmpty) {
@@ -238,7 +242,9 @@ class PrayerTimesService {
       }
 
       final parts = (gregorian['date'] ?? '').toString().split('-');
-      final isoDate = parts.length == 3 ? '${parts[2]}-${parts[1]}-${parts[0]}' : '';
+      final isoDate = parts.length == 3
+          ? '${parts[2]}-${parts[1]}-${parts[0]}'
+          : '';
       if (isoDate.isEmpty) continue;
 
       result.add(_buildDay(
@@ -279,7 +285,7 @@ class PrayerTimesService {
     // Five requests at a time keeps the fallback quick while staying well
     // below the public API's 60 requests/minute limit for a single month.
     for (var start = 0; start < dates.length; start += 5) {
-      final end = (start + 5).clamp(0, dates.length);
+      final end = (start + 5).clamp(0, dates.length).toInt();
       final batch = dates.sublist(start, end);
       final responses = await Future.wait(
         batch.map(
@@ -302,7 +308,9 @@ class PrayerTimesService {
       throw const FormatException('eSalah returned no usable prayer days');
     }
 
-    results.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+    results.sort(
+      (a, b) => (a['date'] as String).compareTo(b['date'] as String),
+    );
     return LocationPrayerTimesResult(days: results, timezone: timezone);
   }
 
@@ -327,7 +335,9 @@ class PrayerTimesService {
         .get(uri, headers: _headers)
         .timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) {
-      throw HttpException('eSalah returned ${response.statusCode} for $dateText');
+      throw HttpException(
+        'eSalah returned ${response.statusCode} for $dateText',
+      );
     }
 
     final decoded = jsonDecode(response.body);
@@ -342,7 +352,8 @@ class PrayerTimesService {
         ? Map<String, dynamic>.from(body['location'] as Map)
         : <String, dynamic>{};
 
-    final timezone = (location['timezone'] ?? body['timezone'] ?? '').toString().trim();
+    final timezone =
+        (location['timezone'] ?? body['timezone'] ?? '').toString().trim();
     final responseDate = (body['date'] ?? dateText).toString().trim();
 
     return _ESalahDayResult(
@@ -373,17 +384,30 @@ class PrayerTimesService {
     return {
       'date': date,
       'fajr': _adjustTime(_cleanTime(fajr), offsets['fajr'] ?? 0),
-      'sunrise': _adjustTime(_cleanTime(sunrise), offsets['sunrise'] ?? 0),
+      'sunrise': _adjustTime(
+        _cleanTime(sunrise),
+        offsets['sunrise'] ?? 0,
+      ),
       'dhuhr': _adjustTime(_cleanTime(dhuhr), offsets['dhuhr'] ?? 0),
       'asr': _adjustTime(_cleanTime(asr), offsets['asr'] ?? 0),
-      'maghrib': _adjustTime(_cleanTime(maghrib), offsets['maghrib'] ?? 0),
+      'maghrib': _adjustTime(
+        _cleanTime(maghrib),
+        offsets['maghrib'] ?? 0,
+      ),
       'isha': _adjustTime(_cleanTime(isha), offsets['isha'] ?? 0),
     };
   }
 
   bool _isValidDay(Map<String, dynamic> day) {
     if ((day['date'] ?? '').toString().trim().isEmpty) return false;
-    for (final key in const ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha']) {
+    for (final key in const [
+      'fajr',
+      'sunrise',
+      'dhuhr',
+      'asr',
+      'maghrib',
+      'isha',
+    ]) {
       if ((day[key] ?? '').toString().trim().isEmpty) return false;
     }
     return true;
