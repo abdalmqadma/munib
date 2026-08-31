@@ -117,9 +117,6 @@ object PrayerWidgetScheduler {
             isArabic -> "h:mm 'م'"
             else -> "h:mm a"
         }
-        val timeFormat = SimpleDateFormat(timePattern, locale).apply {
-            timeZone = selectedTimeZone
-        }
         val dhikr = minuteDhikr(now, isArabic)
         val nextLabel = if (isArabic) "الصلاة التالية" else "Next prayer"
         val remainingLabel = if (isArabic) "متبقي" else "remaining"
@@ -144,18 +141,20 @@ object PrayerWidgetScheduler {
             views.setTextViewText(R.id.widget_remaining_label, remainingLabel)
             views.setTextViewText(R.id.widget_dhikr, dhikr)
             views.setTextViewText(R.id.widget_date, dateFormat.format(Date(now)))
+
+            // All widget sizes use TextClock now, so the displayed clock keeps
+            // advancing even when Android delays our optional minute refresh.
+            views.setCharSequence(R.id.widget_current_time, "setFormat12Hour", timePattern)
+            views.setCharSequence(R.id.widget_current_time, "setFormat24Hour", timePattern)
+            views.setString(R.id.widget_current_time, "setTimeZone", selectedTimeZone.id)
+
             if (layoutRes == R.layout.widget_large) {
-                views.setCharSequence(R.id.widget_current_time, "setFormat12Hour", timePattern)
-                views.setCharSequence(R.id.widget_current_time, "setFormat24Hour", timePattern)
-                views.setString(R.id.widget_current_time, "setTimeZone", selectedTimeZone.id)
                 views.setTextViewText(
                     R.id.widget_location,
                     locationName.ifBlank {
                         if (isArabic) "الموقع غير محدد" else "Location not set"
                     },
                 )
-            } else {
-                views.setTextViewText(R.id.widget_current_time, timeFormat.format(Date(now)))
             }
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
             views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
@@ -260,10 +259,32 @@ object PrayerWidgetScheduler {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pendingIntent = refreshPendingIntent(context, 4107)
         val triggerAt = atMillis + 1_500L
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
-        } else {
-            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                alarmManager.canScheduleExactAlarms() -> {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAt,
+                    pendingIntent,
+                )
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAt,
+                    pendingIntent,
+                )
+            }
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M -> {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAt,
+                    pendingIntent,
+                )
+            }
+            else -> {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+            }
         }
     }
 

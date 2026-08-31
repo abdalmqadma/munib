@@ -265,6 +265,8 @@ class SettingsScreen extends StatelessWidget {
       if (result.days.isEmpty) throw Exception('empty');
 
       final parts = location.city.split(',');
+      final locationId =
+          '${location.latitude.toStringAsFixed(5)}:${location.longitude.toStringAsFixed(5)}';
       await provider.addLocationImsakia(
         name: parts.first.trim(),
         country: parts.length > 1
@@ -275,6 +277,12 @@ class SettingsScreen extends StatelessWidget {
         timezone: result.timezone,
         prayers: result.days.map(PrayerDay.fromJson).toList(),
       );
+
+      final locationIndex =
+          provider.savedLocations.indexWhere((item) => item.id == locationId);
+      if (locationIndex > 0) {
+        await provider.reorderSavedLocations(locationIndex, 0);
+      }
 
       if (context.mounted) {
         messenger.hideCurrentSnackBar();

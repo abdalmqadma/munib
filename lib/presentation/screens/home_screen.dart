@@ -132,7 +132,6 @@ class HomeContent extends StatefulWidget {
 class _HomeContentState extends State<HomeContent> {
   final _locationService = LocationService();
   bool _isAutoFetching = false;
-  String? _locationName;
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
@@ -158,7 +157,6 @@ class _HomeContentState extends State<HomeContent> {
       final location =
           await _locationService.getCurrentLocation(requestPermission: false);
       if (!mounted) return;
-      setState(() => _locationName = location.city);
       await provider.updateSetting('currentCity', location.city);
     } catch (_) {}
   }
@@ -274,7 +272,6 @@ class _HomeContentState extends State<HomeContent> {
     try {
       final location =
           await _locationService.getCurrentLocation(requestPermission: false);
-      if (mounted) setState(() => _locationName = location.city);
 
       final result = await AIService().fetchPrayerTimesForLocation(
         location.latitude,
@@ -287,6 +284,8 @@ class _HomeContentState extends State<HomeContent> {
       final city = parts.isNotEmpty ? parts.first.trim() : location.city;
       final country =
           parts.length > 1 ? parts.sublist(1).join(',').trim() : '';
+      final locationId =
+          '${location.latitude.toStringAsFixed(5)}:${location.longitude.toStringAsFixed(5)}';
 
       await provider.addLocationImsakia(
         name: city,
@@ -296,6 +295,12 @@ class _HomeContentState extends State<HomeContent> {
         timezone: result.timezone,
         prayers: result.days.map(PrayerDay.fromJson).toList(),
       );
+
+      final locationIndex =
+          provider.savedLocations.indexWhere((item) => item.id == locationId);
+      if (locationIndex > 0) {
+        await provider.reorderSavedLocations(locationIndex, 0);
+      }
     } catch (e) {
       if (!mounted) return;
       final message = e.toString().contains('service_disabled')
@@ -319,7 +324,7 @@ class _HomeContentState extends State<HomeContent> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
           children: [
-            _HomeHeader(locationName: _locationName ?? provider.currentCity),
+            _HomeHeader(locationName: provider.currentCity),
             const SizedBox(height: 24),
             if (provider.monthlyPrayers.isEmpty)
               _EmptyState(
