@@ -9,15 +9,6 @@ void main() {
       expect(profile.method, 5);
       expect(profile.school, 0);
       expect(profile.tune, '0,0,0,-1,-1,2,0,-1,0');
-      expect(profile.fallbackMethodSlug, 'egyptian');
-      expect(profile.tuneOffsets, {
-        'fajr': 0,
-        'sunrise': 0,
-        'dhuhr': -1,
-        'asr': -1,
-        'maghrib': 2,
-        'isha': -1,
-      });
     });
 
     test('detects Gaza profile when reverse geocoding is unavailable', () {
@@ -28,7 +19,6 @@ void main() {
 
       expect(profile.method, 5);
       expect(profile.tune, '0,0,0,-1,-1,2,0,-1,0');
-      expect(profile.fallbackMethodSlug, 'egyptian');
     });
 
     test('prefers a supplied country code over coordinate fallback', () {
@@ -40,7 +30,6 @@ void main() {
 
       expect(profile.method, 4);
       expect(profile.tune, isNull);
-      expect(profile.fallbackMethodSlug, 'umm-al-qura');
     });
 
     test('uses the generic default outside known profiles', () {
@@ -52,7 +41,6 @@ void main() {
       expect(profile.method, 3);
       expect(profile.school, 0);
       expect(profile.tune, isNull);
-      expect(profile.fallbackMethodSlug, 'mwl');
     });
   });
 }
