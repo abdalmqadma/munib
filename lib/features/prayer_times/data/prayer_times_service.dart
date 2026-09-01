@@ -118,14 +118,57 @@ class PrayerTimesService {
       countryCode: countryCode,
     );
 
-    final query = <String, String>{
+    final regionalQuery = <String, String>{
       'latitude': latitude.toString(),
       'longitude': longitude.toString(),
       'method': profile.method.toString(),
       'school': profile.school.toString(),
     };
-    if (profile.tune != null) query['tune'] = profile.tune!;
+    if (profile.tune != null) regionalQuery['tune'] = profile.tune!;
 
+    Object? regionalError;
+    try {
+      return await _fetchCalendar(target, regionalQuery);
+    } catch (error) {
+      regionalError = error;
+    }
+
+    // This is the exact minimal request shape Munib used before regional
+    // profiles were introduced. Keep it as the first compatibility fallback
+    // so a fresh install can still obtain a calendar if a proxy/API deployment
+    // rejects school/tune or newer method parameters.
+    final legacyQuery = <String, String>{
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+      'method': '3',
+    };
+    Object? legacyError;
+    try {
+      return await _fetchCalendar(target, legacyQuery);
+    } catch (error) {
+      legacyError = error;
+    }
+
+    // Last resort: let AlAdhan select the calculation method from coordinates.
+    // This also protects against a calculation-method id changing upstream.
+    final minimalQuery = <String, String>{
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+    };
+    try {
+      return await _fetchCalendar(target, minimalQuery);
+    } catch (minimalError) {
+      throw HttpException(
+        'Prayer calendar failed. regional=$regionalError; '
+        'legacy=$legacyError; minimal=$minimalError',
+      );
+    }
+  }
+
+  Future<LocationPrayerTimesResult> _fetchCalendar(
+    DateTime target,
+    Map<String, String> query,
+  ) async {
     final uri = Uri.https(
       'api.aladhan.com',
       '/v1/calendar/${target.year}/${target.month}',
@@ -137,7 +180,11 @@ class PrayerTimesService {
       throw HttpException('Prayer API returned ${response.statusCode}');
     }
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw const FormatException('Invalid prayer API response');
+    }
+    final body = Map<String, dynamic>.from(decoded);
     if (body['code'] != 200 || body['data'] is! List) {
       throw const FormatException('Invalid prayer API response');
     }
@@ -172,7 +219,7 @@ class PrayerTimesService {
           ? '${parts[2]}-${parts[1]}-${parts[0]}'
           : '';
 
-      result.add({
+      final day = <String, dynamic>{
         'date': isoDate,
         'fajr': cleanTime(timings['Fajr']),
         'sunrise': cleanTime(timings['Sunrise']),
@@ -180,13 +227,30 @@ class PrayerTimesService {
         'asr': cleanTime(timings['Asr']),
         'maghrib': cleanTime(timings['Maghrib']),
         'isha': cleanTime(timings['Isha']),
-      });
+      };
+      if (_isUsableDay(day)) result.add(day);
     }
 
-    return LocationPrayerTimesResult(
-      days: result.where((e) => (e['date'] as String).isNotEmpty).toList(),
-      timezone: timezone,
-    );
+    if (result.isEmpty) {
+      throw const FormatException('Prayer API returned no usable days');
+    }
+
+    return LocationPrayerTimesResult(days: result, timezone: timezone);
+  }
+
+  bool _isUsableDay(Map<String, dynamic> day) {
+    for (final key in const [
+      'date',
+      'fajr',
+      'sunrise',
+      'dhuhr',
+      'asr',
+      'maghrib',
+      'isha',
+    ]) {
+      if ((day[key] ?? '').toString().trim().isEmpty) return false;
+    }
+    return true;
   }
 
   Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(
