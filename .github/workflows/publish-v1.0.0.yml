@@ -1,0 +1,91 @@
+name: Publish Munib v1.0.0
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/publish-v1.0.0.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download and verify release APK
+        env:
+          MEDIAFIRE_PAGE: https://www.mediafire.com/file/3pppnb7fpr97q4u/munib_1.0.0.apk/file
+          EXPECTED_SHA256: db8e5f4a6efd091d3aa197df3ba0ca70d375021a4e6958faf789e2206012a74d
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import html
+          import os
+          import re
+          import urllib.request
+
+          page_url = os.environ['MEDIAFIRE_PAGE']
+          expected = os.environ['EXPECTED_SHA256'].lower()
+          headers = {'User-Agent': 'Mozilla/5.0'}
+
+          request = urllib.request.Request(page_url, headers=headers)
+          with urllib.request.urlopen(request, timeout=30) as response:
+              page = response.read().decode('utf-8', errors='ignore')
+
+          patterns = (
+              r'id=["\']downloadButton["\'][^>]*href=["\']([^"\']+)["\']',
+              r'href=["\']([^"\']+)["\'][^>]*id=["\']downloadButton["\']',
+          )
+          direct_url = None
+          for pattern in patterns:
+              match = re.search(pattern, page, re.IGNORECASE)
+              if match:
+                  direct_url = html.unescape(match.group(1))
+                  break
+
+          if not direct_url:
+              raise SystemExit('Could not resolve the MediaFire download URL')
+          if direct_url.startswith('//'):
+              direct_url = 'https:' + direct_url
+
+          download = urllib.request.Request(direct_url, headers=headers)
+          sha256 = hashlib.sha256()
+          with urllib.request.urlopen(download, timeout=90) as response, open('munib_1.0.0.apk', 'wb') as output:
+              while True:
+                  chunk = response.read(1024 * 1024)
+                  if not chunk:
+                      break
+                  output.write(chunk)
+                  sha256.update(chunk)
+
+          actual = sha256.hexdigest().lower()
+          print(f'APK SHA-256: {actual}')
+          if actual != expected:
+              raise SystemExit(f'APK checksum mismatch: expected {expected}, got {actual}')
+          PY
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'EOF'
+          أول إصدار مستقر من منيب.
+
+          يتضمن مواقيت الصلاة والإمساكية حسب الموقع، الأذكار، نفحات، التنبيهات، الويدجت، دعم العربية والإنجليزية، وتسجيل الحساب مع صورة شخصية محفوظة لكل مستخدم.
+
+          Android APK: `munib_1.0.0.apk`
+          EOF
+
+          if gh release view v1.0.0 >/dev/null 2>&1; then
+            gh release upload v1.0.0 munib_1.0.0.apk --clobber
+          else
+            gh release create v1.0.0 munib_1.0.0.apk \
+              --target 1f4c99e1bcbc150682044ae49edefa7ba3b0074c \
+              --title "Munib v1.0.0" \
+              --notes-file release-notes.md
+          fi
