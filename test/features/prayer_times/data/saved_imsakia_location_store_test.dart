@@ -44,6 +44,23 @@ void main() {
     expect(loaded.single.prayers.single.maghrib, '18:20');
   });
 
+  test('fresh install returns a mutable empty location list', () async {
+    final loaded = await store.load();
+    expect(loaded, isEmpty);
+
+    loaded.add(const SavedImsakiaLocation(
+      id: 'test',
+      name: 'Test',
+      country: '',
+      latitude: 0,
+      longitude: 0,
+      timezone: '',
+      prayers: [],
+    ));
+
+    expect(loaded, hasLength(1));
+  });
+
   test('returns an empty collection for corrupted persisted JSON', () async {
     SharedPreferences.setMockInitialValues({
       'savedImsakiaLocationsV1': '{broken-json',
