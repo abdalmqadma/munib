@@ -5,7 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class ProfilePhotoService {
-  static const _apiBaseUrl = String.fromEnvironment('MUNIB_API_BASE_URL');
+  static const _apiBaseUrl = String.fromEnvironment(
+    'MUNIB_API_BASE_URL',
+    defaultValue: 'https://muneeb-api.abd810166.workers.dev',
+  );
 
   Future<String> upload({
     required User user,
