@@ -19,13 +19,13 @@ class SavedImsakiaLocationStore {
       final savedJson = prefs.getString(_savedLocationsKey);
       if (savedJson == null || savedJson.isEmpty) {
         debugPrint('[$_tag][STORE] LOAD no saved locations');
-        return const [];
+        return <SavedImsakiaLocation>[];
       }
 
       final decoded = jsonDecode(savedJson);
       if (decoded is! List) {
         debugPrint('[$_tag][STORE][WARN] LOAD invalid root type=${decoded.runtimeType}');
-        return const [];
+        return <SavedImsakiaLocation>[];
       }
       final locations = decoded
           .whereType<Map>()
@@ -37,7 +37,7 @@ class SavedImsakiaLocationStore {
     } catch (error, stackTrace) {
       debugPrint('[$_tag][STORE][EXCEPTION] LOAD failed: $error');
       debugPrint('[$_tag][STORE][STACK] $stackTrace');
-      return const [];
+      return <SavedImsakiaLocation>[];
     }
   }
 
