@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -371,15 +372,10 @@ class _HomeHeader extends StatelessWidget {
             context,
             MaterialPageRoute(builder: (_) => const ProfileScreen()),
           ),
-          child: CircleAvatar(
-            radius: 23,
+          child: _AccountAvatar(
+            user: user,
             backgroundColor: scheme.primaryContainer,
-            foregroundImage: user?.photoURL?.isNotEmpty == true
-                ? NetworkImage(user!.photoURL!)
-                : null,
-            child: user?.photoURL?.isNotEmpty == true
-                ? null
-                : Icon(Icons.person_rounded, color: scheme.primary),
+            foregroundColor: scheme.primary,
           ),
         ),
         const SizedBox(width: 14),
@@ -426,6 +422,46 @@ class _HomeHeader extends StatelessWidget {
       ],
     );
   }
+}
+
+class _AccountAvatar extends StatelessWidget {
+  final User? user;
+  final Color backgroundColor;
+  final Color foregroundColor;
+
+  const _AccountAvatar({
+    required this.user,
+    required this.backgroundColor,
+    required this.foregroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (user == null) return _avatar(null);
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(user!.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final savedPhoto = snapshot.data?.data()?['photo_url'] as String?;
+        final photo = savedPhoto?.trim().isNotEmpty == true
+            ? savedPhoto
+            : user!.photoURL;
+        return _avatar(photo);
+      },
+    );
+  }
+
+  Widget _avatar(String? photo) => CircleAvatar(
+        radius: 23,
+        backgroundColor: backgroundColor,
+        foregroundImage:
+            photo?.isNotEmpty == true ? NetworkImage(photo!) : null,
+        child: photo?.isNotEmpty == true
+            ? null
+            : Icon(Icons.person_rounded, color: foregroundColor),
+      );
 }
 
 class _NextPrayerSummary extends StatelessWidget {
