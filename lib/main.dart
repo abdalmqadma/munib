@@ -15,27 +15,6 @@ import 'presentation/screens/splash_screen.dart';
 import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
 
-Future<PrayerProvider> _bootstrapPrayerProvider() async {
-  final provider = PrayerProvider();
-  final deadline = DateTime.now().add(const Duration(seconds: 10));
-
-  // PrayerProvider loads saved locations before it opens the prayers box.
-  // Waiting for that box here prevents first-run UI actions from racing the
-  // asynchronous bootstrap and having a freshly added location overwritten by
-  // an older/empty initialization snapshot.
-  while (!Hive.isBoxOpen('prayers')) {
-    if (DateTime.now().isAfter(deadline)) {
-      throw StateError('Prayer state initialization timed out');
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-  }
-
-  // Let the continuation after Hive.openBox publish the loaded state before
-  // the first Flutter frame can trigger location actions.
-  await Future<void>.delayed(Duration.zero);
-  return provider;
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -45,7 +24,8 @@ void main() async {
   if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(PrayerDayAdapter());
   await NotificationService.init();
 
-  final prayerProvider = await _bootstrapPrayerProvider();
+  final prayerProvider = PrayerProvider();
+  await prayerProvider.ready;
 
   runApp(
     MultiProvider(
