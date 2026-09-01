@@ -1,11 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/profile_photo_service.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
 
@@ -18,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool photoBusy = false;
+  final _profilePhotoService = ProfilePhotoService();
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
@@ -34,27 +35,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => photoBusy = true);
     try {
-      final ref = FirebaseStorage.instance.ref('profile_photos/${user.uid}.jpg');
-      await ref.putData(
-        await picked.readAsBytes(),
-        SettableMetadata(contentType: 'image/jpeg'),
+      final url = await _profilePhotoService.upload(
+        user: user,
+        bytes: await picked.readAsBytes(),
       );
-      final url = await ref.getDownloadURL();
       await user.updatePhotoURL(url);
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set(
-        {'photo_url': url},
+        {
+          'photo_url': url,
+          'photo_public_id': 'munib/profile_images/${user.uid}',
+          'photo_updated_at': FieldValue.serverTimestamp(),
+        },
         SetOptions(merge: true),
       );
       await user.reload();
       if (mounted) setState(() {});
-    } on FirebaseException catch (e) {
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               t(
-                'تعذر رفع الصورة. حاول مرة أخرى. (${e.code})',
-                'Could not upload the photo. Try again. (${e.code})',
+                'تعذر رفع الصورة. حاول مرة أخرى.',
+                'Could not upload the photo. Try again.',
               ),
             ),
           ),
@@ -112,7 +115,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ? user.displayName!
                     : context.tr('munibUser'));
             final email = user.email ?? (data?['email'] as String?) ?? '';
-            final photo = user.photoURL ?? data?['photo_url'] as String?;
+            final savedPhoto = data?['photo_url'] as String?;
+            final photo = savedPhoto?.trim().isNotEmpty == true
+                ? savedPhoto
+                : user.photoURL;
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
