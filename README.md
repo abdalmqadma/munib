@@ -2,6 +2,12 @@
 
 Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, Nafahat, notifications and home screen widgets in one focused experience that supports both Arabic and English.
 
+Profile photo uploads require the secured Munib API URL at build time:
+
+```bash
+flutter build apk --dart-define=MUNIB_API_BASE_URL=https://your-api.example.com
+```
+
 [![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?logo=flutter)](https://flutter.dev)
 [![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
