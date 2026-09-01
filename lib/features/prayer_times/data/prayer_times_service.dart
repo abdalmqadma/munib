@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class LocationPrayerTimesResult {
@@ -27,8 +28,6 @@ class PrayerCalculationProfile {
   /// Selects the calculation authority normally used in the detected country.
   static PrayerCalculationProfile forCountry(String? countryCode) {
     switch ((countryCode ?? '').trim().toUpperCase()) {
-      // Palestine: Egyptian Survey angles with local Gaza timetable offsets.
-      // tune order: Imsak,Fajr,Sunrise,Dhuhr,Asr,Maghrib,Sunset,Isha,Midnight.
       case 'PS':
         return const PrayerCalculationProfile(
           method: 5,
@@ -92,8 +91,6 @@ class PrayerCalculationProfile {
     final code = (countryCode ?? '').trim().toUpperCase();
     if (code.isNotEmpty) return forCountry(code);
 
-    // Reverse geocoding can be unavailable even while GPS and the prayer API
-    // work. Keep Gaza on its calibrated profile in that case as well.
     final isGazaStrip = latitude >= 31.20 &&
         latitude <= 31.65 &&
         longitude >= 34.15 &&
@@ -105,6 +102,8 @@ class PrayerCalculationProfile {
 }
 
 class PrayerTimesService {
+  static const _tag = 'MUNIB_IMSAKIA';
+
   Future<LocationPrayerTimesResult> fetchPrayerTimesForLocation(
     double latitude,
     double longitude, {
@@ -132,61 +131,91 @@ class PrayerTimesService {
       query,
     );
 
-    final response = await http.get(uri).timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw HttpException('Prayer API returned ${response.statusCode}');
-    }
+    debugPrint('[$_tag][PRAYER_API] START lat=$latitude lon=$longitude country=${countryCode ?? ''} month=${target.year}-${target.month} method=${profile.method} school=${profile.school} tune=${profile.tune ?? 'none'}');
+    debugPrint('[$_tag][PRAYER_API] GET $uri');
 
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    if (body['code'] != 200 || body['data'] is! List) {
-      throw const FormatException('Invalid prayer API response');
-    }
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 20));
+      debugPrint('[$_tag][PRAYER_API] HTTP ${response.statusCode} bodyBytes=${response.bodyBytes.length}');
 
-    String cleanTime(dynamic value) {
-      final match = RegExp(
-        r'\b([01]?\d|2[0-3]):[0-5]\d\b',
-      ).firstMatch((value ?? '').toString());
-      return match?.group(0)?.padLeft(5, '0') ?? '';
-    }
-
-    String timezone = '';
-    final result = <Map<String, dynamic>>[];
-
-    for (final raw in body['data'] as List) {
-      if (raw is! Map) continue;
-
-      final item = Map<String, dynamic>.from(raw);
-      final timings = Map<String, dynamic>.from(item['timings'] as Map? ?? {});
-      final dateMap = Map<String, dynamic>.from(item['date'] as Map? ?? {});
-      final gregorian = Map<String, dynamic>.from(
-        dateMap['gregorian'] as Map? ?? {},
-      );
-      final meta = Map<String, dynamic>.from(item['meta'] as Map? ?? {});
-
-      if (timezone.isEmpty) {
-        timezone = (meta['timezone'] ?? '').toString().trim();
+      if (response.statusCode != 200) {
+        final preview = response.body.length > 1000
+            ? response.body.substring(0, 1000)
+            : response.body;
+        debugPrint('[$_tag][PRAYER_API][ERROR] response=$preview');
+        throw HttpException('Prayer API returned ${response.statusCode}');
       }
 
-      final parts = (gregorian['date'] ?? '').toString().split('-');
-      final isoDate = parts.length == 3
-          ? '${parts[2]}-${parts[1]}-${parts[0]}'
-          : '';
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        debugPrint('[$_tag][PRAYER_API][ERROR] decoded response is ${decoded.runtimeType}, expected Map');
+        throw const FormatException('Invalid prayer API response type');
+      }
+      final body = decoded;
+      debugPrint('[$_tag][PRAYER_API] apiCode=${body['code']} dataType=${body['data'].runtimeType}');
 
-      result.add({
-        'date': isoDate,
-        'fajr': cleanTime(timings['Fajr']),
-        'sunrise': cleanTime(timings['Sunrise']),
-        'dhuhr': cleanTime(timings['Dhuhr']),
-        'asr': cleanTime(timings['Asr']),
-        'maghrib': cleanTime(timings['Maghrib']),
-        'isha': cleanTime(timings['Isha']),
-      });
+      if (body['code'] != 200 || body['data'] is! List) {
+        final preview = response.body.length > 1000
+            ? response.body.substring(0, 1000)
+            : response.body;
+        debugPrint('[$_tag][PRAYER_API][ERROR] invalid payload=$preview');
+        throw const FormatException('Invalid prayer API response');
+      }
+
+      String cleanTime(dynamic value) {
+        final match = RegExp(
+          r'\b([01]?\d|2[0-3]):[0-5]\d\b',
+        ).firstMatch((value ?? '').toString());
+        return match?.group(0)?.padLeft(5, '0') ?? '';
+      }
+
+      String timezone = '';
+      final result = <Map<String, dynamic>>[];
+
+      for (final raw in body['data'] as List) {
+        if (raw is! Map) continue;
+
+        final item = Map<String, dynamic>.from(raw);
+        final timings = Map<String, dynamic>.from(item['timings'] as Map? ?? {});
+        final dateMap = Map<String, dynamic>.from(item['date'] as Map? ?? {});
+        final gregorian = Map<String, dynamic>.from(
+          dateMap['gregorian'] as Map? ?? {},
+        );
+        final meta = Map<String, dynamic>.from(item['meta'] as Map? ?? {});
+
+        if (timezone.isEmpty) {
+          timezone = (meta['timezone'] ?? '').toString().trim();
+        }
+
+        final parts = (gregorian['date'] ?? '').toString().split('-');
+        final isoDate = parts.length == 3
+            ? '${parts[2]}-${parts[1]}-${parts[0]}'
+            : '';
+
+        result.add({
+          'date': isoDate,
+          'fajr': cleanTime(timings['Fajr']),
+          'sunrise': cleanTime(timings['Sunrise']),
+          'dhuhr': cleanTime(timings['Dhuhr']),
+          'asr': cleanTime(timings['Asr']),
+          'maghrib': cleanTime(timings['Maghrib']),
+          'isha': cleanTime(timings['Isha']),
+        });
+      }
+
+      final validDays =
+          result.where((e) => (e['date'] as String).isNotEmpty).toList();
+      debugPrint('[$_tag][PRAYER_API] SUCCESS days=${validDays.length} timezone=$timezone first=${validDays.isEmpty ? 'none' : validDays.first['date']} last=${validDays.isEmpty ? 'none' : validDays.last['date']}');
+
+      return LocationPrayerTimesResult(
+        days: validDays,
+        timezone: timezone,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('[$_tag][PRAYER_API][EXCEPTION] $error');
+      debugPrint('[$_tag][PRAYER_API][STACK] $stackTrace');
+      rethrow;
     }
-
-    return LocationPrayerTimesResult(
-      days: result.where((e) => (e['date'] as String).isNotEmpty).toList(),
-      timezone: timezone,
-    );
   }
 
   Future<List<Map<String, dynamic>>> fetchPrayerTimesByCoordinates(
@@ -204,6 +233,5 @@ class PrayerTimesService {
           .days;
 }
 
-/// Temporary compatibility name while older screens migrate to PrayerTimesService.
 @Deprecated('Use PrayerTimesService instead.')
 class AIService extends PrayerTimesService {}
