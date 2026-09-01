@@ -27,7 +27,6 @@ class PrayerProvider with ChangeNotifier {
 
   final SavedImsakiaLocationStore _savedLocationsStore =
       const SavedImsakiaLocationStore();
-  late final Future<void> _initialization;
   List<PrayerDay> _monthlyPrayers = [];
   PrayerDay? _currentDay;
   String _nextPrayerName = '';
@@ -81,11 +80,9 @@ class PrayerProvider with ChangeNotifier {
   Locale get locale => Locale(languageCode);
   bool get isEnglish => languageCode == 'en';
   ThemeMode get themeMode => isDarkMode ? ThemeMode.dark : ThemeMode.light;
-  Future<void> get ready => _initialization;
 
   PrayerProvider() {
-    _initialization = _initialize();
-    unawaited(_initialization);
+    unawaited(_initialize());
     _startTimer();
   }
 
@@ -184,7 +181,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setMonthlyPrayers(List<PrayerDay> prayers) async {
-    await ready;
     final detached = _detachedPrayers(prayers);
     final activeId = _activeLocationId;
     if (activeId != null) {
@@ -227,7 +223,6 @@ class PrayerProvider with ChangeNotifier {
     required String timezone,
     required List<PrayerDay> prayers,
   }) async {
-    await ready;
     if (_monthlyPrayers.isNotEmpty && _savedLocations.isEmpty) {
       await _snapshotCurrentImsakiaIfNeeded();
     }
@@ -270,7 +265,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> reorderSavedLocations(int oldIndex, int newIndex) async {
-    await ready;
     if (oldIndex < 0 || oldIndex >= _savedLocations.length) return;
     if (newIndex > oldIndex) newIndex -= 1;
     if (newIndex < 0 || newIndex >= _savedLocations.length) return;
@@ -303,7 +297,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> removeSavedLocation(String id) async {
-    await ready;
     _savedLocations.removeWhere((e) => e.id == id);
     if (_savedLocations.isNotEmpty) {
       await _activateLocation(_savedLocations.first, persistLocations: true);
@@ -343,7 +336,6 @@ class PrayerProvider with ChangeNotifier {
       );
 
   Future<void> setLanguage(String code) async {
-    await ready;
     final normalized = code.toLowerCase() == 'en' || code == 'English' ? 'en' : 'ar';
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('language', normalized);
@@ -360,7 +352,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setDarkMode(bool value) async {
-    await ready;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', value);
     isDarkMode = value;
@@ -368,7 +359,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setUse24HourFormat(bool value) async {
-    await ready;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('use24HourFormat', value);
     use24HourFormat = value;
@@ -408,14 +398,12 @@ class PrayerProvider with ChangeNotifier {
       );
 
   Future<NotificationPermissionState> requestNotificationPermissions() async {
-    await ready;
     final state = await NotificationService.requestPermissions();
     if (state.notificationsAllowed) await _syncNotifications();
     return state;
   }
 
   Future<bool> setPrayerNotificationsEnabled(bool value) async {
-    await ready;
     if (value) {
       final permission = await NotificationService.requestPermissions();
       if (!permission.notificationsAllowed) return false;
@@ -429,7 +417,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setReminderNotificationsEnabled(bool value) async {
-    await ready;
     reminderNotif = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('reminderNotif', value);
@@ -438,7 +425,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<bool> setMorningAzkarNotificationsEnabled(bool value) async {
-    await ready;
     if (value) {
       final permission = await NotificationService.requestPermissions();
       if (!permission.notificationsAllowed) return false;
@@ -452,7 +438,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<bool> setEveningAzkarNotificationsEnabled(bool value) async {
-    await ready;
     if (value) {
       final permission = await NotificationService.requestPermissions();
       if (!permission.notificationsAllowed) return false;
@@ -466,7 +451,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setMorningAzkarMinuteOfDay(int? minuteOfDay) async {
-    await ready;
     if (minuteOfDay != null && (minuteOfDay < 0 || minuteOfDay > 1439)) return;
     _morningAzkarMinuteOfDay = minuteOfDay;
     final prefs = await SharedPreferences.getInstance();
@@ -480,7 +464,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setEveningAzkarMinuteOfDay(int minuteOfDay) async {
-    await ready;
     if (minuteOfDay < 0 || minuteOfDay > 1439) return;
     _eveningAzkarMinuteOfDay = minuteOfDay;
     final prefs = await SharedPreferences.getInstance();
@@ -490,7 +473,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setSilentMode(bool value) async {
-    await ready;
     silentMode = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('silentMode', value);
@@ -499,7 +481,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setAdhanVoice(String value) async {
-    await ready;
     final normalized = value == 'Meccan' || value == 'None' ? value : 'Madinah';
     adhanVoice = normalized;
     final prefs = await SharedPreferences.getInstance();
@@ -509,7 +490,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> setPrayerNotificationEnabled(String prayer, bool value) async {
-    await ready;
     if (!notificationPrayers.contains(prayer)) return;
     _enabledNotificationPrayers[prayer] = value;
     final prefs = await SharedPreferences.getInstance();
@@ -519,7 +499,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<bool> setPrayerReminderMinutes(String prayer, int minutes) async {
-    await ready;
     if (!notificationPrayers.contains(prayer) ||
         minutes < 1 ||
         minutes > 1440 ||
@@ -535,7 +514,6 @@ class PrayerProvider with ChangeNotifier {
   }
 
   Future<void> updateSetting(String key, dynamic value) async {
-    await ready;
     if (key == 'language' && value is String) {
       await setLanguage(value);
       return;

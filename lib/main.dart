@@ -24,13 +24,10 @@ void main() async {
   if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(PrayerDayAdapter());
   await NotificationService.init();
 
-  final prayerProvider = PrayerProvider();
-  await prayerProvider.ready;
-
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => prayerProvider),
+        ChangeNotifierProvider(create: (_) => PrayerProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: const ImsakiahApp(),

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -20,8 +18,6 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
   final _searchService = PlaceSearchService();
   final _aiService = AIService();
 
-  Timer? _debounce;
-  int _searchGeneration = 0;
   bool _searching = false;
   bool _adding = false;
   String? _error;
@@ -32,49 +28,30 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String value) {
-    _debounce?.cancel();
-    final query = value.trim();
-    if (query.isEmpty) {
-      _searchGeneration++;
-      setState(() {
-        _searching = false;
-        _results = const [];
-        _error = null;
-      });
-      return;
-    }
-    _debounce = Timer(const Duration(milliseconds: 320), () => _search(query));
-  }
-
-  Future<void> _search([String? rawQuery]) async {
-    final query = (rawQuery ?? _controller.text).trim();
-    if (query.isEmpty) return;
-
-    final generation = ++_searchGeneration;
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.length < 2 || _searching) return;
     setState(() {
       _searching = true;
       _error = null;
     });
     try {
       final result = await _searchService.search(query);
-      if (!mounted || generation != _searchGeneration) return;
+      if (!mounted) return;
       setState(() => _results = result);
     } catch (_) {
-      if (!mounted || generation != _searchGeneration) return;
-      setState(() => _error = t(
-            'تعذر البحث عن الأماكن. تحقق من الإنترنت وحاول مرة أخرى.',
-            'Could not search places. Check your connection and try again.',
-          ));
-    } finally {
-      if (mounted && generation == _searchGeneration) {
-        setState(() => _searching = false);
+      if (mounted) {
+        setState(() => _error = t(
+              'تعذر البحث عن الأماكن. تحقق من الإنترنت وحاول مرة أخرى.',
+              'Could not search places. Check your connection and try again.',
+            ));
       }
+    } finally {
+      if (mounted) setState(() => _searching = false);
     }
   }
 
@@ -93,27 +70,14 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
       if (result.days.isEmpty) throw Exception('empty_times');
       final prayers = result.days.map(PrayerDay.fromJson).toList();
       if (!mounted) return;
-
-      final provider = context.read<PrayerProvider>();
-      final locationId =
-          '${place.latitude.toStringAsFixed(5)}:${place.longitude.toStringAsFixed(5)}';
-      try {
-        await provider.addLocationImsakia(
-          name: place.city,
-          country: place.country,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          timezone: result.timezone,
-          prayers: prayers,
-        );
-      } catch (_) {
-        // The location is persisted before widget/notification synchronization.
-        // If a later platform sync fails, do not tell the user the city failed
-        // to load when it was already saved successfully.
-        final saved = provider.savedLocations.any((item) => item.id == locationId);
-        if (!saved) rethrow;
-      }
-
+      await context.read<PrayerProvider>().addLocationImsakia(
+            name: place.city,
+            country: place.country,
+            latitude: place.latitude,
+            longitude: place.longitude,
+            timezone: result.timezone,
+            prayers: prayers,
+          );
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (_) {
@@ -143,20 +107,12 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                 controller: _controller,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
-                onChanged: _onQueryChanged,
-                onSubmitted: (value) {
-                  _debounce?.cancel();
-                  _search(value);
-                },
+                onSubmitted: (_) => _search(),
                 decoration: InputDecoration(
-                  hintText:
-                      t('ابحث عن مدينة أو دولة...', 'Search for a city or country...'),
+                  hintText: t('ابحث عن مدينة أو دولة...', 'Search for a city or country...'),
                   prefixIcon: const Icon(Icons.public_rounded),
                   suffixIcon: IconButton(
-                    onPressed: () {
-                      _debounce?.cancel();
-                      _search();
-                    },
+                    onPressed: _searching ? null : _search,
                     icon: const Icon(Icons.search_rounded),
                   ),
                 ),
@@ -181,19 +137,13 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.travel_explore_rounded,
-                                size: 58, color: scheme.primary),
+                            Icon(Icons.travel_explore_rounded, size: 58, color: scheme.primary),
                             const SizedBox(height: 16),
                             Text(
-                              _controller.text.trim().isEmpty
-                                  ? t(
-                                      'ابدأ بكتابة اسم المدينة وستظهر النتائج مباشرة.',
-                                      'Start typing a city name and results will appear automatically.',
-                                    )
-                                  : t(
-                                      'لا توجد نتائج مطابقة حتى الآن.',
-                                      'No matching results yet.',
-                                    ),
+                              t(
+                                'اكتب اسم أي مدينة في العالم، مثل غزة أو بروكسل أو إسطنبول.',
+                                'Type any city in the world, such as Gaza, Brussels, or Istanbul.',
+                              ),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.bodyLarge,
                             ),
@@ -224,8 +174,7 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                                       color: scheme.primary.withValues(alpha: .12),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
-                                    child: Icon(Icons.location_on_outlined,
-                                        color: scheme.primary),
+                                    child: Icon(Icons.location_on_outlined, color: scheme.primary),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -236,8 +185,7 @@ class _LocationImsakiaScreenState extends State<LocationImsakiaScreen> {
                                           [place.city, place.country]
                                               .where((e) => e.trim().isNotEmpty)
                                               .join(', '),
-                                          style: theme.textTheme.titleMedium
-                                              ?.copyWith(fontWeight: FontWeight.w700),
+                                          style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                                         ),
                                         const SizedBox(height: 3),
                                         Text(
