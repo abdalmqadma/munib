@@ -108,8 +108,9 @@ class NafahatBubbleService : Service() {
                 updateCard()
             }
             ACTION_SHOW_AZKAR -> {
-                presentDueAzkarPrompt()
+                val shown = presentDueAzkarPrompt()
                 NafahatAlarmScheduler.scheduleAzkarAlarms(this)
+                if (!shown) finishBubbleSession()
             }
             else -> {
                 presentRegularContent(
@@ -166,14 +167,15 @@ class NafahatBubbleService : Service() {
         showCurrentNafha()
     }
 
-    private fun presentDueAzkarPrompt() {
+    private fun presentDueAzkarPrompt(): Boolean {
         val now = System.currentTimeMillis()
         normalizeExpiredAzkarAt("Morning", now)
         normalizeExpiredAzkarAt("Evening", now)
-        val special = dueAzkarCategory(now) ?: return
+        val special = dueAzkarCategory(now) ?: return false
         activeAzkarCategory = special
         markAzkarPromptShown(special)
         showCurrentNafha()
+        return true
     }
 
     private fun selectContent(firstRun: Boolean) {
