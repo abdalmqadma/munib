@@ -74,6 +74,9 @@ class NafahatBubbleService : Service() {
     private var bubbleAttached = false
     private var card: LinearLayout? = null
     private var deleteTarget: TextView? = null
+    private var deleteTargetParams: WindowManager.LayoutParams? = null
+    private var deleteTargetAttached = false
+    private var deleteTargetVisible = false
     private var snapAnimator: ValueAnimator? = null
     private var index = 0
     private var unread = true
@@ -132,7 +135,7 @@ class NafahatBubbleService : Service() {
     override fun onDestroy() {
         snapAnimator?.cancel()
         removeCard()
-        hideDeleteTarget()
+        removeDeleteTarget()
         if (bubbleAttached) runCatching { wm.removeView(bubble) }
         bubbleAttached = false
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -372,6 +375,10 @@ class NafahatBubbleService : Service() {
         applyBubbleStyle()
 
         if (!bubbleAttached) {
+            // Keep the delete target window behind the Nafahat head. It stays
+            // transparent until dragging begins, so the head remains visible
+            // above it when both centers meet.
+            ensureDeleteTargetWindow()
             bubble.alpha = 0f
             wm.addView(bubble, params)
             bubbleAttached = true
@@ -532,7 +539,8 @@ class NafahatBubbleService : Service() {
     }
 
     private fun deleteTargetTopLeft(size: Int): Pair<Int, Int> =
-        ((screenWidth() - size) / 2) to (safeTop() + dp(18))
+        ((screenWidth() - size) / 2) to
+            (screenHeight() - navigationBarHeight() - dp(18) - size)
 
     private fun deleteTargetCenter(): Pair<Float, Float> {
         val size = dp(76)
@@ -541,7 +549,7 @@ class NafahatBubbleService : Service() {
     }
 
     private fun magnetizedPosition(x: Int, y: Int, size: Int): Pair<Int, Int> {
-        if (deleteTarget == null) return x to y
+        if (!deleteTargetVisible) return x to y
         val centerX = x + size / 2f
         val centerY = y + size / 2f
         val target = deleteTargetCenter()
@@ -629,8 +637,9 @@ class NafahatBubbleService : Service() {
         }
     }
 
-    private fun showDeleteTarget() {
-        if (deleteTarget != null) return
+    private fun ensureDeleteTargetWindow() {
+        if (deleteTargetAttached) return
+
         val dark = isDarkTheme()
         val view = TextView(this).apply {
             text = "×"
@@ -649,27 +658,53 @@ class NafahatBubbleService : Service() {
             alpha = 0f
             scaleX = .92f
             scaleY = .92f
-            animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(140L).start()
         }
+
         val size = dp(76)
         val targetPosition = deleteTargetTopLeft(size)
         val params = WindowManager.LayoutParams(
             size,
             size,
             overlayType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = targetPosition.first
             y = targetPosition.second
         }
+
         deleteTarget = view
+        deleteTargetParams = params
         wm.addView(view, params)
+        deleteTargetAttached = true
+    }
+
+    private fun showDeleteTarget() {
+        ensureDeleteTargetWindow()
+        val view = deleteTarget ?: return
+        val params = deleteTargetParams ?: return
+        val size = dp(76)
+        val targetPosition = deleteTargetTopLeft(size)
+        params.x = targetPosition.first
+        params.y = targetPosition.second
+        if (deleteTargetAttached) runCatching { wm.updateViewLayout(view, params) }
+
+        deleteTargetVisible = true
+        view.animate().cancel()
+        view.scaleX = .92f
+        view.scaleY = .92f
+        view.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(140L)
+            .start()
     }
 
     private fun updateDeleteTargetState(params: WindowManager.LayoutParams, bubbleSize: Int) {
-        deleteTarget?.apply {
+        deleteTarget?.takeIf { deleteTargetVisible }?.apply {
             val inside =
                 isInsideDeleteSnapRange(params.x, params.y, bubbleSize)
             val bubbleCenterX = params.x + bubbleSize / 2f
@@ -695,7 +730,7 @@ class NafahatBubbleService : Service() {
         y: Int,
         bubbleSize: Int,
     ): Boolean {
-        if (deleteTarget == null) return false
+        if (!deleteTargetVisible) return false
         val bubbleRadius = bubbleSize / 2f
         val centerX = x + bubbleRadius
         val centerY = y + bubbleRadius
@@ -707,7 +742,26 @@ class NafahatBubbleService : Service() {
     }
 
     private fun hideDeleteTarget() {
-        deleteTarget?.let { runCatching { wm.removeView(it) } }
+        deleteTargetVisible = false
+        deleteTarget?.apply {
+            animate().cancel()
+            animate()
+                .alpha(0f)
+                .scaleX(.92f)
+                .scaleY(.92f)
+                .setDuration(120L)
+                .start()
+        }
+    }
+
+    private fun removeDeleteTarget() {
+        deleteTargetVisible = false
+        deleteTarget?.animate()?.cancel()
+        if (deleteTargetAttached) {
+            deleteTarget?.let { runCatching { wm.removeView(it) } }
+        }
+        deleteTargetAttached = false
+        deleteTargetParams = null
         deleteTarget = null
     }
 
