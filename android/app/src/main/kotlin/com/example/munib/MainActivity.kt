@@ -14,6 +14,7 @@ class MainActivity : FlutterActivity() {
     private val prefsName = "nafahat_prefs"
     private var pendingAzkarCategory: String? = null
     private var startNafahatAfterOverlayPermission = false
+    private var startNafahatAfterExactAlarmPermission = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -24,9 +25,21 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!startNafahatAfterOverlayPermission) return
-        startNafahatAfterOverlayPermission = false
-        if (canDrawOverlays()) startNafahatService()
+
+        if (startNafahatAfterOverlayPermission) {
+            startNafahatAfterOverlayPermission = false
+            if (canDrawOverlays()) startNafahatService()
+            return
+        }
+
+        if (startNafahatAfterExactAlarmPermission) {
+            startNafahatAfterExactAlarmPermission = false
+            if (NafahatAlarmScheduler.canScheduleExactly(this)) {
+                startNafahatService()
+            } else {
+                NafahatAlarmScheduler.disable(this)
+            }
+        }
     }
 
     private fun configureNafahatChannel(flutterEngine: FlutterEngine) {
@@ -50,10 +63,14 @@ class MainActivity : FlutterActivity() {
                     }
                     "startNafahat" -> startNafahat(result)
                     "stopNafahat" -> {
+                        NafahatAlarmScheduler.disable(this)
                         stopService(Intent(this, NafahatBubbleService::class.java))
                         result.success(true)
                     }
-                    "isNafahatRunning" -> result.success(NafahatBubbleService.isRunning)
+                    "isNafahatRunning" -> result.success(
+                        NafahatAlarmScheduler.isEnabled(this) &&
+                            NafahatAlarmScheduler.canScheduleExactly(this),
+                    )
                     "getNafahatSettings" -> result.success(readNafahatSettings())
                     "setNafahatSettings" -> {
                         saveNafahatSettings(
@@ -174,8 +191,32 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun startNafahatService() {
+        if (!canDrawOverlays()) return
+
+        if (!NafahatAlarmScheduler.canScheduleExactly(this)) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                startNafahatAfterExactAlarmPermission = true
+                val permissionIntent = Intent(
+                    Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                    Uri.parse("package:$packageName"),
+                )
+                runCatching { startActivity(permissionIntent) }
+                    .onFailure {
+                        startNafahatAfterExactAlarmPermission = false
+                        NafahatAlarmScheduler.disable(this)
+                    }
+            }
+            return
+        }
+
+        val firstRun = !NafahatAlarmScheduler.isEnabled(this)
+        NafahatAlarmScheduler.enable(this)
         if (NafahatBubbleService.isRunning) return
-        val intent = Intent(this, NafahatBubbleService::class.java)
+
+        val intent = Intent(this, NafahatBubbleService::class.java).apply {
+            action = NafahatBubbleService.ACTION_SHOW_REGULAR
+            putExtra(NafahatBubbleService.EXTRA_FIRST_RUN, firstRun)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
     }
@@ -231,12 +272,14 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun refreshNafahatIfRunning() {
+        if (NafahatAlarmScheduler.isEnabled(this)) {
+            NafahatAlarmScheduler.rescheduleAll(this)
+        }
         if (!NafahatBubbleService.isRunning) return
+
         val refresh = Intent(this, NafahatBubbleService::class.java).apply {
             action = NafahatBubbleService.ACTION_REFRESH_SETTINGS
         }
-        // This call comes from the foreground activity and targets the already
-        // running service, so it refreshes timers without reposting its notice.
         startService(refresh)
     }
 
