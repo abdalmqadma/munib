@@ -18,7 +18,23 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool photoBusy = false;
+  bool _clearingUnverifiedSession = false;
   final _profilePhotoService = ProfilePhotoService();
+  final _auth = AuthService();
+
+  void _clearUnverifiedSession() {
+    if (_clearingUnverifiedSession) return;
+    _clearingUnverifiedSession = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await _auth.signOut();
+      } finally {
+        if (mounted) {
+          setState(() => _clearingUnverifiedSession = false);
+        }
+      }
+    });
+  }
 
   bool get _isArabic => Localizations.localeOf(context).languageCode == 'ar';
 
@@ -70,9 +86,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    final currentUser = FirebaseAuth.instance.currentUser;
     final scheme = Theme.of(context).colorScheme;
+    final hasUnverifiedPasswordSession = currentUser != null &&
+        _auth.isPasswordUser(currentUser) &&
+        !currentUser.emailVerified;
 
+    if (hasUnverifiedPasswordSession) {
+      _clearUnverifiedSession();
+      return Scaffold(
+        appBar: AppBar(title: Text(context.tr('profile'))),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final user = currentUser;
     if (user == null) {
       return Scaffold(
         appBar: AppBar(title: Text(context.tr('profile'))),
@@ -109,10 +137,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .snapshots(),
           builder: (context, snapshot) {
             final data = snapshot.data?.data();
-            final name = (data?['name'] as String?)?.trim().isNotEmpty == true
-                ? data!['name'] as String
-                : (user.displayName?.trim().isNotEmpty == true
-                    ? user.displayName!
+            final savedName = data?['name'] as String?;
+            final authName = user.displayName;
+            final name = AuthService.isValidDisplayName(savedName ?? '')
+                ? AuthService.normalizeDisplayName(savedName!)
+                : (AuthService.isValidDisplayName(authName ?? '')
+                    ? AuthService.normalizeDisplayName(authName!)
                     : context.tr('munibUser'));
             final email = user.email ?? (data?['email'] as String?) ?? '';
             final savedPhoto = data?['photo_url'] as String?;
@@ -176,6 +206,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 18),
                       Text(
                         name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
                       if (email.isNotEmpty) ...[
