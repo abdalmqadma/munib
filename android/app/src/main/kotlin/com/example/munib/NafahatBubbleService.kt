@@ -12,9 +12,8 @@ import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
+import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -39,6 +38,9 @@ class NafahatBubbleService : Service() {
         var isRunning: Boolean = false
 
         const val ACTION_REFRESH_SETTINGS = "com.example.munib.NAFAHAT_REFRESH_SETTINGS"
+        const val ACTION_SHOW_REGULAR = "com.example.munib.NAFAHAT_SHOW_REGULAR"
+        const val ACTION_SHOW_AZKAR = "com.example.munib.NAFAHAT_SHOW_AZKAR"
+        const val EXTRA_FIRST_RUN = "nafahat_first_run"
         const val EXTRA_OPEN_AZKAR_CATEGORY = "open_azkar_category"
 
         private const val CHANNEL_ID = "nafahat_service_quiet_v2"
@@ -50,6 +52,7 @@ class NafahatBubbleService : Service() {
         private const val KEY_EVENING_ENABLED = "evening_azkar_enabled"
         private const val KEY_LAST_MORNING_DAY = "last_morning_azkar_day"
         private const val KEY_LAST_EVENING_DAY = "last_evening_azkar_day"
+        private const val KEY_CONTENT_INDEX = "last_content_index"
         private const val MORNING_AFTER_FAJR_MINUTES = 15L
 
         private val GOLD = Color.rgb(244, 199, 106)
@@ -64,7 +67,6 @@ class NafahatBubbleService : Service() {
     }
 
     private val items = NafahatContentRepository.items
-    private val handler = Handler(Looper.getMainLooper())
 
     private lateinit var wm: WindowManager
     private lateinit var bubble: TextView
@@ -78,45 +80,44 @@ class NafahatBubbleService : Service() {
     private var activeAzkarCategory: String? = null
     private var cardWasVisibleBeforeDrag = false
 
-    private val nextNafha = object : Runnable {
-        override fun run() {
-            presentRegularContent()
-            scheduleNextRegularNafha()
-        }
-    }
-
-    private val scheduledAzkarPrompt = object : Runnable {
-        override fun run() {
-            presentDueAzkarPrompt()
-            scheduleNextAzkarWakeup()
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         isRunning = true
         createNotificationChannel()
         startForegroundNotification()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
+        index = prefs().getInt(KEY_CONTENT_INDEX, 0).coerceIn(0, items.lastIndex)
         createBubbleIfNeeded()
-
-        presentRegularContent(firstRun = true)
-        presentDueAzkarPrompt()
-        scheduleNextRegularNafha()
-        scheduleNextAzkarWakeup()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_REFRESH_SETTINGS) {
-            handler.removeCallbacks(nextNafha)
-            handler.removeCallbacks(scheduledAzkarPrompt)
-            if (items[index].kind !in enabledKinds()) selectContent(firstRun = false)
-            applyBubbleStyle()
-            updateCard()
-            scheduleNextRegularNafha()
-            scheduleNextAzkarWakeup()
+        if (!NafahatAlarmScheduler.isEnabled(this) ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                !Settings.canDrawOverlays(this))
+        ) {
+            finishBubbleSession()
+            return START_NOT_STICKY
         }
-        return START_STICKY
+
+        when (intent?.action) {
+            ACTION_REFRESH_SETTINGS -> {
+                if (items[index].kind !in enabledKinds()) {
+                    selectContent(firstRun = false)
+                }
+                applyBubbleStyle()
+                updateCard()
+            }
+            ACTION_SHOW_AZKAR -> {
+                presentDueAzkarPrompt()
+                NafahatAlarmScheduler.scheduleAzkarAlarms(this)
+            }
+            else -> {
+                presentRegularContent(
+                    firstRun = intent?.getBooleanExtra(EXTRA_FIRST_RUN, false) == true,
+                )
+            }
+        }
+        return START_NOT_STICKY
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -128,12 +129,18 @@ class NafahatBubbleService : Service() {
     }
 
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
         snapAnimator?.cancel()
         removeCard()
         hideDeleteTarget()
         if (bubbleAttached) runCatching { wm.removeView(bubble) }
         bubbleAttached = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
         isRunning = false
         super.onDestroy()
     }
@@ -141,9 +148,6 @@ class NafahatBubbleService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun prefs() = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-    private fun intervalMinutes(): Int =
-        prefs().getInt("interval_minutes", 30).coerceIn(10, 180)
 
     private fun contextualMode(): Boolean = prefs().getBoolean("contextual_mode", true)
 
@@ -163,7 +167,10 @@ class NafahatBubbleService : Service() {
     }
 
     private fun presentDueAzkarPrompt() {
-        val special = dueAzkarCategory(System.currentTimeMillis()) ?: return
+        val now = System.currentTimeMillis()
+        normalizeExpiredAzkarAt("Morning", now)
+        normalizeExpiredAzkarAt("Evening", now)
+        val special = dueAzkarCategory(now) ?: return
         activeAzkarCategory = special
         markAzkarPromptShown(special)
         showCurrentNafha()
@@ -178,6 +185,7 @@ class NafahatBubbleService : Service() {
                 val selected = contextual.firstOrNull { items.indexOf(it) != index }
                     ?: contextual.first()
                 index = items.indexOf(selected).coerceAtLeast(0)
+                persistContentIndex()
                 return
             }
         }
@@ -186,6 +194,11 @@ class NafahatBubbleService : Service() {
         } else {
             selectNextItem()
         }
+        persistContentIndex()
+    }
+
+    private fun persistContentIndex() {
+        prefs().edit().putInt(KEY_CONTENT_INDEX, index).apply()
     }
 
     private fun selectNextItem() {
@@ -229,32 +242,6 @@ class NafahatBubbleService : Service() {
         closest?.minus(now)
     } catch (_: Exception) {
         null
-    }
-
-    private fun scheduleNextRegularNafha() {
-        handler.removeCallbacks(nextNafha)
-        handler.postDelayed(nextNafha, intervalMinutes() * 60_000L)
-    }
-
-    private fun scheduleNextAzkarWakeup() {
-        handler.removeCallbacks(scheduledAzkarPrompt)
-        val now = System.currentTimeMillis()
-        normalizeExpiredAzkarAt("Morning", now)
-        normalizeExpiredAzkarAt("Evening", now)
-
-        if (dueAzkarCategory(now) != null) {
-            handler.post(scheduledAzkarPrompt)
-            return
-        }
-
-        val nextDue = listOfNotNull(
-            nextUnshownAzkarAt("Morning", now),
-            nextUnshownAzkarAt("Evening", now),
-        ).minOrNull() ?: return
-        handler.postDelayed(
-            scheduledAzkarPrompt,
-            (nextDue - now).coerceAtLeast(1_000L),
-        )
     }
 
     private fun dueAzkarCategory(now: Long): String? {
@@ -408,7 +395,10 @@ class NafahatBubbleService : Service() {
         activeAzkarCategory = null
         val params = bubbleParams
         if (params != null) resetBubblePosition(params)
-        if (!bubbleAttached) return
+        if (!bubbleAttached) {
+            finishBubbleSession()
+            return
+        }
         bubble.animate().cancel()
         bubble.animate()
             .alpha(0f)
@@ -416,8 +406,20 @@ class NafahatBubbleService : Service() {
             .withEndAction {
                 if (bubbleAttached) runCatching { wm.removeView(bubble) }
                 bubbleAttached = false
+                finishBubbleSession()
             }
             .start()
+    }
+
+    private fun finishBubbleSession() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_ID)
+        stopSelf()
     }
 
     private fun createBubbleIfNeeded() {
@@ -828,7 +830,7 @@ class NafahatBubbleService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         startActivity(intent)
-        removeCard()
+        dismissCurrentBubble()
     }
 
     private fun kindLabel(kind: String, ar: Boolean): String {
