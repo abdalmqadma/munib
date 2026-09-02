@@ -892,7 +892,12 @@ class NafahatBubbleService : Service() {
                 .setContentText(
                     if (ar) "نفحات مفعلة حسب جدولك" else "Nafahat is active on your schedule",
                 )
-                .setOngoing(true)
+                .setCategory(NotificationCompat.CATEGORY_SERVICE)
+                .setPriority(NotificationCompat.PRIORITY_MIN)
+                .setVisibility(NotificationCompat.VISIBILITY_SECRET)
+                .setOngoing(false)
+                .setOnlyAlertOnce(true)
+                .setShowWhen(false)
                 .setSilent(true)
                 .setContentIntent(pending)
                 .build(),
@@ -905,8 +910,11 @@ class NafahatBubbleService : Service() {
                 NotificationChannel(
                     CHANNEL_ID,
                     "Munib Nafahat",
-                    NotificationManager.IMPORTANCE_LOW,
+                    NotificationManager.IMPORTANCE_MIN,
                 ).apply {
+                    description = "Background service for user-enabled Nafahat"
+                    setShowBadge(false)
+                    lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
                     setSound(null, null)
                     enableVibration(false)
                 },
