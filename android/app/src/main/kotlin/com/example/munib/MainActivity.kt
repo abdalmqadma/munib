@@ -231,12 +231,13 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun refreshNafahatIfRunning() {
-        // Settings are persisted above and the service reads them when it
-        // presents the next item. Do not start the foreground service again
-        // just to refresh preferences: on Android 13+ that re-posts a dismissed
-        // foreground-service notification and makes it look impossible to clear.
-        // Keeping the existing service instance untouched avoids that nuisance.
         if (!NafahatBubbleService.isRunning) return
+        val refresh = Intent(this, NafahatBubbleService::class.java).apply {
+            action = NafahatBubbleService.ACTION_REFRESH_SETTINGS
+        }
+        // This call comes from the foreground activity and targets the already
+        // running service, so it refreshes timers without reposting its notice.
+        startService(refresh)
     }
 
     private fun canDrawOverlays(): Boolean =
