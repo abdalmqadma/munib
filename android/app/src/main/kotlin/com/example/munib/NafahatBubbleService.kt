@@ -531,18 +531,13 @@ class NafahatBubbleService : Service() {
         }
     }
 
+    private fun deleteTargetTopLeft(size: Int): Pair<Int, Int> =
+        ((screenWidth() - size) / 2) to (safeTop() + dp(18))
+
     private fun deleteTargetCenter(): Pair<Float, Float> {
-        val target = deleteTarget
-        if (target != null && target.width > 0 && target.height > 0) {
-            val position = IntArray(2)
-            runCatching { target.getLocationOnScreen(position) }
-            if (position[0] != 0 || position[1] != 0) {
-                return (position[0] + target.width / 2f) to
-                    (position[1] + target.height / 2f)
-            }
-        }
-        return screenWidth() / 2f to
-            (screenHeight() - navigationBarHeight() - dp(18) - dp(38).toFloat())
+        val size = dp(76)
+        val position = deleteTargetTopLeft(size)
+        return (position.first + size / 2f) to (position.second + size / 2f)
     }
 
     private fun magnetizedPosition(x: Int, y: Int, size: Int): Pair<Int, Int> {
@@ -644,16 +639,20 @@ class NafahatBubbleService : Service() {
             setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(if (dark) Color.rgb(145, 35, 45) else Color.rgb(180, 45, 55))
-                setStroke(dp(2), if (dark) GOLD else GOLD_DARK)
+                setColor(
+                    if (dark) Color.argb(191, 145, 35, 45)
+                    else Color.argb(191, 180, 45, 55),
+                )
+                setStroke(dp(2), Color.rgb(214, 218, 224))
             }
             elevation = 18f
-            alpha = .92f
+            alpha = 0f
             scaleX = .92f
             scaleY = .92f
             animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(140L).start()
         }
         val size = dp(76)
+        val targetPosition = deleteTargetTopLeft(size)
         val params = WindowManager.LayoutParams(
             size,
             size,
@@ -661,8 +660,9 @@ class NafahatBubbleService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT,
         ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = navigationBarHeight() + dp(18)
+            gravity = Gravity.TOP or Gravity.START
+            x = targetPosition.first
+            y = targetPosition.second
         }
         deleteTarget = view
         wm.addView(view, params)
@@ -684,7 +684,7 @@ class NafahatBubbleService : Service() {
             animate()
                 .scaleX(if (inside) 1.18f else if (near) 1.08f else 1f)
                 .scaleY(if (inside) 1.18f else if (near) 1.08f else 1f)
-                .alpha(if (near) 1f else .88f)
+                .alpha(1f)
                 .setDuration(90L)
                 .start()
         }
