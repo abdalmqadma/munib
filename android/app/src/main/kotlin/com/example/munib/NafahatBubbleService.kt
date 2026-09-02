@@ -451,6 +451,7 @@ class NafahatBubbleService : Service() {
         var touchX = 0f
         var touchY = 0f
         var moved = false
+        var lockedToDeleteTarget = false
 
         bubble.setOnTouchListener { _, event ->
             when (event.action) {
@@ -461,6 +462,7 @@ class NafahatBubbleService : Service() {
                     touchX = event.rawX
                     touchY = event.rawY
                     moved = false
+                    lockedToDeleteTarget = false
                     bubble.alpha = 1f
                     cardWasVisibleBeforeDrag = card != null
                     true
@@ -478,6 +480,8 @@ class NafahatBubbleService : Service() {
                     }
                     var nextX = (startX + dx).coerceIn(0, screenWidth() - size)
                     var nextY = (startY + dy).coerceIn(safeTop(), safeBottom() - size)
+                    lockedToDeleteTarget =
+                        isInsideDeleteSnapRange(nextX, nextY, size)
                     val magnetized = magnetizedPosition(nextX, nextY, size)
                     nextX = magnetized.first
                     nextY = magnetized.second
@@ -488,8 +492,9 @@ class NafahatBubbleService : Service() {
                     true
                 }
 
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    val dismiss = moved && isFullyInsideDeleteTarget(params, size)
+                MotionEvent.ACTION_UP -> {
+                    val dismiss = moved && lockedToDeleteTarget
+                    lockedToDeleteTarget = false
                     hideDeleteTarget()
                     when {
                         dismiss -> dismissCurrentBubble()
@@ -506,6 +511,14 @@ class NafahatBubbleService : Service() {
                             snapToNearestEdge()
                         }
                     }
+                    true
+                }
+
+                MotionEvent.ACTION_CANCEL -> {
+                    lockedToDeleteTarget = false
+                    hideDeleteTarget()
+                    restoreCardAfterDrag()
+                    snapToNearestEdge()
                     true
                 }
 
@@ -536,13 +549,12 @@ class NafahatBubbleService : Service() {
         val targetX = target.first
         val targetY = target.second
         val distance = hypot((centerX - targetX).toDouble(), (centerY - targetY).toDouble())
-        val lockRadius = dp(62).toDouble()
-        if (distance <= lockRadius) {
+        if (isInsideDeleteSnapRange(x, y, size)) {
             return (targetX - size / 2f).toInt().coerceIn(0, screenWidth() - size) to
                 (targetY - size / 2f).toInt().coerceIn(safeTop(), safeBottom() - size)
         }
 
-        val magnetRadius = dp(150).toDouble()
+        val magnetRadius = dp(180).toDouble()
         if (distance > magnetRadius) return x to y
         val strength = ((magnetRadius - distance) / magnetRadius).coerceIn(0.20, 0.78)
         val snappedCenterX = centerX + ((targetX - centerX) * strength).toFloat()
@@ -654,7 +666,8 @@ class NafahatBubbleService : Service() {
 
     private fun updateDeleteTargetState(params: WindowManager.LayoutParams, bubbleSize: Int) {
         deleteTarget?.apply {
-            val inside = isFullyInsideDeleteTarget(params, bubbleSize)
+            val inside =
+                isInsideDeleteSnapRange(params.x, params.y, bubbleSize)
             val bubbleCenterX = params.x + bubbleSize / 2f
             val bubbleCenterY = params.y + bubbleSize / 2f
             val target = deleteTargetCenter()
@@ -662,7 +675,7 @@ class NafahatBubbleService : Service() {
                 (bubbleCenterX - target.first).toDouble(),
                 (bubbleCenterY - target.second).toDouble(),
             )
-            val near = distance <= dp(150)
+            val near = distance <= dp(180)
             animate().cancel()
             animate()
                 .scaleX(if (inside) 1.18f else if (near) 1.08f else 1f)
@@ -673,20 +686,20 @@ class NafahatBubbleService : Service() {
         }
     }
 
-    private fun isFullyInsideDeleteTarget(
-        params: WindowManager.LayoutParams,
+    private fun isInsideDeleteSnapRange(
+        x: Int,
+        y: Int,
         bubbleSize: Int,
     ): Boolean {
-        val targetRadius = dp(38).toFloat()
+        if (deleteTarget == null) return false
         val bubbleRadius = bubbleSize / 2f
-        val maxCenterDistance = (targetRadius - bubbleRadius).coerceAtLeast(0f)
-        val centerX = params.x + bubbleRadius
-        val centerY = params.y + bubbleRadius
+        val centerX = x + bubbleRadius
+        val centerY = y + bubbleRadius
         val target = deleteTargetCenter()
         return hypot(
             (centerX - target.first).toDouble(),
             (centerY - target.second).toDouble(),
-        ) <= maxCenterDistance
+        ) <= dp(112)
     }
 
     private fun hideDeleteTarget() {
