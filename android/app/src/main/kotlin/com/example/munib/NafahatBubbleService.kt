@@ -41,10 +41,9 @@ class NafahatBubbleService : Service() {
         const val ACTION_REFRESH_SETTINGS = "com.example.munib.NAFAHAT_REFRESH_SETTINGS"
         const val EXTRA_OPEN_AZKAR_CATEGORY = "open_azkar_category"
 
-        private const val CHANNEL_ID = "nafahat_bubble"
+        private const val CHANNEL_ID = "nafahat_service_quiet_v2"
         private const val NOTIFICATION_ID = 9127
         private const val PREFS_NAME = "nafahat_prefs"
-        private const val KEY_NEXT_DUE_AT = "next_due_at"
         private const val KEY_MORNING_AT = "morning_azkar_at"
         private const val KEY_EVENING_AT = "evening_azkar_at"
         private const val KEY_MORNING_ENABLED = "morning_azkar_enabled"
@@ -81,8 +80,15 @@ class NafahatBubbleService : Service() {
 
     private val nextNafha = object : Runnable {
         override fun run() {
-            presentDueContent()
-            scheduleNextWakeup()
+            presentRegularContent()
+            scheduleNextRegularNafha()
+        }
+    }
+
+    private val scheduledAzkarPrompt = object : Runnable {
+        override fun run() {
+            presentDueAzkarPrompt()
+            scheduleNextAzkarWakeup()
         }
     }
 
@@ -94,24 +100,21 @@ class NafahatBubbleService : Service() {
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         createBubbleIfNeeded()
 
-        val now = System.currentTimeMillis()
-        val regularDue = prefs().getLong(KEY_NEXT_DUE_AT, 0L)
-        val specialDue = dueAzkarCategory(now) != null
-        when {
-            regularDue <= 0L -> presentDueContent(firstRun = true)
-            regularDue <= now || specialDue -> presentDueContent(firstRun = false)
-            else -> scheduleNextWakeup()
-        }
+        presentRegularContent(firstRun = true)
+        presentDueAzkarPrompt()
+        scheduleNextRegularNafha()
+        scheduleNextAzkarWakeup()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_REFRESH_SETTINGS) {
             handler.removeCallbacks(nextNafha)
+            handler.removeCallbacks(scheduledAzkarPrompt)
             if (items[index].kind !in enabledKinds()) selectContent(firstRun = false)
             applyBubbleStyle()
             updateCard()
-            startForegroundNotification()
-            scheduleNextWakeup()
+            scheduleNextRegularNafha()
+            scheduleNextAzkarWakeup()
         }
         return START_STICKY
     }
@@ -153,18 +156,16 @@ class NafahatBubbleService : Service() {
     private fun filteredItems(): List<NafhaContent> =
         items.filter { it.kind in enabledKinds() }.ifEmpty { items }
 
-    private fun presentDueContent(firstRun: Boolean = false) {
-        val special = dueAzkarCategory(System.currentTimeMillis())
-        if (special != null) {
-            activeAzkarCategory = special
-            markAzkarPromptShown(special)
-        } else {
-            activeAzkarCategory = null
-            selectContent(firstRun)
-            prefs().edit()
-                .putLong(KEY_NEXT_DUE_AT, System.currentTimeMillis() + intervalMinutes() * 60_000L)
-                .apply()
-        }
+    private fun presentRegularContent(firstRun: Boolean = false) {
+        activeAzkarCategory = null
+        selectContent(firstRun)
+        showCurrentNafha()
+    }
+
+    private fun presentDueAzkarPrompt() {
+        val special = dueAzkarCategory(System.currentTimeMillis()) ?: return
+        activeAzkarCategory = special
+        markAzkarPromptShown(special)
         showCurrentNafha()
     }
 
@@ -230,29 +231,29 @@ class NafahatBubbleService : Service() {
         null
     }
 
-    private fun scheduleNextWakeup() {
+    private fun scheduleNextRegularNafha() {
+        handler.removeCallbacks(nextNafha)
+        handler.postDelayed(nextNafha, intervalMinutes() * 60_000L)
+    }
+
+    private fun scheduleNextAzkarWakeup() {
+        handler.removeCallbacks(scheduledAzkarPrompt)
         val now = System.currentTimeMillis()
         normalizeExpiredAzkarAt("Morning", now)
         normalizeExpiredAzkarAt("Evening", now)
 
-        val editor = prefs().edit()
-        var regularDue = prefs().getLong(KEY_NEXT_DUE_AT, 0L)
-        if (regularDue <= now) {
-            regularDue = now + intervalMinutes() * 60_000L
-            editor.putLong(KEY_NEXT_DUE_AT, regularDue).apply()
+        if (dueAzkarCategory(now) != null) {
+            handler.post(scheduledAzkarPrompt)
+            return
         }
 
-        val candidates = mutableListOf(regularDue)
-        nextUnshownAzkarAt("Morning", now)?.let(candidates::add)
-        nextUnshownAzkarAt("Evening", now)?.let(candidates::add)
-        scheduleAt(candidates.minOrNull() ?: regularDue)
-    }
-
-    private fun scheduleAt(dueAt: Long) {
-        handler.removeCallbacks(nextNafha)
+        val nextDue = listOfNotNull(
+            nextUnshownAzkarAt("Morning", now),
+            nextUnshownAzkarAt("Evening", now),
+        ).minOrNull() ?: return
         handler.postDelayed(
-            nextNafha,
-            (dueAt - System.currentTimeMillis()).coerceAtLeast(1_000L),
+            scheduledAzkarPrompt,
+            (nextDue - now).coerceAtLeast(1_000L),
         )
     }
 
