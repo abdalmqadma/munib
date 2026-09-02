@@ -77,8 +77,10 @@ class _AuthScreenState extends State<AuthScreen> {
       await _finishAuth(user);
     } on FirebaseAuthException catch (e) {
       if (mounted) _showMessage(_authError(e.code));
-    } catch (e) {
-      if (mounted) _showMessage('${context.tr('authUnexpected')}\n$e');
+    } on FormatException {
+      if (mounted) _showMessage(context.tr('nameLettersOnly'));
+    } catch (_) {
+      if (mounted) _showMessage(context.tr('authUnexpected'));
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
@@ -119,7 +121,17 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _leaveVerification() async {
-    await _auth.signOut();
+    if (isLoading) return;
+    setState(() => isLoading = true);
+    try {
+      await _auth.signOut();
+    } catch (_) {
+      if (mounted) _showMessage(context.tr('authUnexpected'));
+      return;
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+
     if (!mounted) return;
     setState(() {
       awaitingVerification = false;
@@ -203,7 +215,12 @@ class _AuthScreenState extends State<AuthScreen> {
     final scheme = theme.colorScheme;
 
     if (awaitingVerification) {
-      return Scaffold(
+      return PopScope<void>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _leaveVerification();
+        },
+        child: Scaffold(
         appBar: AppBar(
           leading: IconButton(
             onPressed: isLoading ? null : _leaveVerification,
@@ -273,6 +290,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ),
         ),
+      ),
       );
     }
 
@@ -312,13 +330,41 @@ class _AuthScreenState extends State<AuthScreen> {
                       TextFormField(
                         controller: _nameController,
                         textInputAction: TextInputAction.next,
+                        maxLines: 1,
+                        maxLength: AuthService.maxDisplayNameLength,
+                        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(
+                            RegExp(
+                              r'[A-Za-z\u0621-\u063A\u0641-\u064A ]',
+                            ),
+                          ),
+                          LengthLimitingTextInputFormatter(
+                            AuthService.maxDisplayNameLength,
+                          ),
+                        ],
                         decoration: InputDecoration(
                           labelText: context.tr('fullName'),
                           prefixIcon: const Icon(Icons.person_outline_rounded),
                         ),
-                        validator: (v) => (v?.trim().length ?? 0) < 2
-                            ? context.tr('nameTooShort')
-                            : null,
+                        validator: (v) {
+                          final value =
+                              AuthService.normalizeDisplayName(v ?? '');
+                          final letterCount =
+                              value.replaceAll(' ', '').length;
+                          if (letterCount <
+                              AuthService.minDisplayNameLetters) {
+                            return context.tr('nameTooShort');
+                          }
+                          if (value.length >
+                              AuthService.maxDisplayNameLength) {
+                            return context.tr('nameTooLong');
+                          }
+                          if (!AuthService.isValidDisplayName(value)) {
+                            return context.tr('nameLettersOnly');
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
                     ],
