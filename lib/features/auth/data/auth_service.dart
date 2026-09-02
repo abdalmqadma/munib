@@ -127,12 +127,17 @@ class AuthService {
     bool isNew = false,
   }) async {
     try {
+      final rawName = nameOverride ?? user.displayName;
+      final normalizedName =
+          rawName == null ? null : normalizeDisplayName(rawName);
       final data = <String, dynamic>{
-        'name': nameOverride ?? user.displayName,
         'email': user.email,
         'email_verified': user.emailVerified,
         'last_login': FieldValue.serverTimestamp(),
       };
+      if (normalizedName != null && isValidDisplayName(normalizedName)) {
+        data['name'] = normalizedName;
+      }
 
       if (isNew) {
         data['created_at'] = FieldValue.serverTimestamp();
