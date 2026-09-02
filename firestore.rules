@@ -10,12 +10,18 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == userId;
     }
 
+    function hasVerifiedEmail() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
     function allowedProfileKeys() {
       return [
         'name',
         'email',
         'email_verified',
         'photo_url',
+        'photo_public_id',
+        'photo_updated_at',
         'created_at',
         'last_login',
         'score'
@@ -29,20 +35,52 @@ service cloud.firestore {
               request.resource.data.email_verified == request.auth.token.email_verified);
     }
 
+    function validName() {
+      return request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 50
+          && request.resource.data.name.matches(
+            '^[A-Za-zء-غف-ي]+( [A-Za-zء-غف-ي]+)*
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) && hasVerifiedEmail();
+      allow create: if isOwner(userId) && hasVerifiedEmail() && validCreate();
+      allow update: if isOwner(userId) && hasVerifiedEmail() && validUpdate();
+      allow delete: if isOwner(userId) && hasVerifiedEmail();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+          );
+    }
+
+    function validPhotoFields() {
+      return (!('photo_url' in request.resource.data) ||
+              request.resource.data.photo_url is string)
+          && (!('photo_public_id' in request.resource.data) ||
+              request.resource.data.photo_public_id is string)
+          && (!('photo_updated_at' in request.resource.data) ||
+              request.resource.data.photo_updated_at is timestamp);
+    }
+
     function validCreate() {
       return request.resource.data.keys().hasOnly(allowedProfileKeys())
           && validIdentityFields()
           && (!('score' in request.resource.data) || request.resource.data.score == 0)
-          && (!('name' in request.resource.data) || request.resource.data.name is string)
-          && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
+          && (!('name' in request.resource.data) || validName())
+          && validPhotoFields();
     }
 
     function validUpdate() {
       return request.resource.data.keys().hasOnly(allowedProfileKeys())
           && validIdentityFields()
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['score', 'created_at']))
-          && (!('name' in request.resource.data) || request.resource.data.name is string)
-          && (!('photo_url' in request.resource.data) || request.resource.data.photo_url is string);
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['name']) || validName())
+          && validPhotoFields();
     }
 
     match /users/{userId} {
