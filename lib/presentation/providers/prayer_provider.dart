@@ -193,6 +193,7 @@ class PrayerProvider with ChangeNotifier {
       }
     }
     await _applyPrayers(detached);
+    await _requestAdhanPermissionsAfterImsakia();
   }
 
   Future<void> _applyPrayers(List<PrayerDay> prayers) async {
@@ -242,6 +243,16 @@ class PrayerProvider with ChangeNotifier {
     _savedLocations.insert(0, item);
 
     await _activateLocation(item, persistLocations: true);
+    await _requestAdhanPermissionsAfterImsakia();
+  }
+
+  Future<void> _requestAdhanPermissionsAfterImsakia() async {
+    if (!prayerNotif || _monthlyPrayers.isEmpty) return;
+    try {
+      await requestNotificationPermissions();
+    } catch (_) {
+      // The Imsakia stays saved even if the platform permission dialog fails.
+    }
   }
 
   Future<void> _snapshotCurrentImsakiaIfNeeded() async {
