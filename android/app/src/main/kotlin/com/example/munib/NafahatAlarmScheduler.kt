@@ -22,13 +22,9 @@ internal object NafahatAlarmScheduler {
     private const val REQUEST_MORNING = 91_271
     private const val REQUEST_EVENING = 91_272
 
-    fun isEnabled(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (prefs.contains(KEY_ENABLED)) return prefs.getBoolean(KEY_ENABLED, false)
-
-        // Migrate users who enabled Nafahat before scheduled alarms were added.
-        return prefs.contains("enabled_kinds")
-    }
+    fun isEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ENABLED, false)
 
     fun canScheduleExactly(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
