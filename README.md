@@ -6,7 +6,16 @@
 
 Munib is an open source Android application built with Flutter and Dart. It combines prayer times, adhkar, Nafahat, notifications and home screen widgets in one focused experience that supports both Arabic and English.
 
+Profile photo uploads require the secured Munib API URL at build time:
 
+```bash
+flutter build apk --dart-define=MUNIB_API_BASE_URL=https://your-api.example.com
+```
+
+[![Flutter](https://img.shields.io/badge/Flutter-Dart-02569B?logo=flutter)](https://flutter.dev)
+[![Platform](https://img.shields.io/badge/Platform-Android-3DDC84?logo=android)](https://www.android.com)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active%20Development-F4B942)](#project-status)
 
 ## Project status 🟡
 
@@ -32,7 +41,8 @@ Current features include:
 
 - Flutter and Dart
 - Provider for state management
-- Firebase Authentication, Firestore and Storage
+- Firebase Authentication and Firestore
+- Cloudinary for profile images through the secured Munib API
 - REST API for prayer times
 - Hive and Shared Preferences for local data
 - Native Android code for widgets and background functionality
@@ -56,6 +66,12 @@ Platform specific Android and iOS configuration remains in the standard Flutter 
 
 ## Getting started 🚀
 
+### Requirements
+
+- Flutter stable with a Dart version compatible with `pubspec.yaml`
+- Android Studio or another Flutter compatible editor
+- JDK 17 for Android builds
+- A Firebase project for authentication and profile features
 
 ### Run locally 💻
 
@@ -72,9 +88,27 @@ For development with your own Firebase project, install the FlutterFire CLI and 
 flutterfire configure
 ```
 
+## Archived Imsakia upload feature
+
+The image/PDF Imsakia upload and OCR feature is intentionally excluded from the MVP so the app does not ship unused OCR dependencies while the extraction backend is not production ready.
+
+The complete implementation is preserved on the branch:
+
+`archive/imsakia-upload-v1`
+
+That branch contains the upload/review screens, OCR service and extraction API integration so the feature can be restored later without rebuilding it from scratch.
+
 ## Development showcase 📱
 
 See the latest Munib interface and screen previews in this [LinkedIn post](https://www.linkedin.com/feed/update/urn:li:activity:7498806020450881536/).
+
+## Roadmap
+
+- Expand automated tests
+- Improve accessibility and localization
+- Continue reliability and performance testing
+- Prepare the first stable Android release
+- Reintroduce Imsakia OCR upload when a stable production API is available
 
 ## Contributing 🤝
 
@@ -87,3 +121,5 @@ Munib is open source software released under the [MIT License](LICENSE).
 ## Author ✍️
 
 Built and maintained by [Abd Alhady Al Maqadma](https://www.linkedin.com/in/abdalmaqadma/).
+
+Prayer times can vary according to location, calculation method and local authority. Users should verify times with a trusted local source when accuracy is critical.
