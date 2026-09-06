@@ -7,7 +7,10 @@ import 'package:timezone/timezone.dart' as tz;
 import 'models/prayer_day.dart';
 
 class WidgetService {
-  static const _widgetNames = <String>[
+  static const iOSAppGroupId = 'group.com.abdalmqadma.munib';
+  static const _iOSWidgetName = 'PrayerWidget';
+
+  static const _androidWidgetNames = <String>[
     'PrayerWidgetSmall',
     'PrayerWidgetMedium',
     'PrayerWidgetLarge',
@@ -18,6 +21,7 @@ class WidgetService {
     String timezone = '',
   }) async {
     try {
+      await _preparePlatform();
       final points = <Map<String, dynamic>>[];
 
       for (final day in days) {
@@ -53,6 +57,7 @@ class WidgetService {
         jsonEncode(points),
       );
       await HomeWidget.saveWidgetData<String>('widget_timezone', timezone);
+      await _refreshAll();
     } catch (e) {
       debugPrint('Error saving widget prayer schedule: $e');
     }
@@ -63,8 +68,10 @@ class WidgetService {
     required bool use24HourFormat,
   }) async {
     try {
+      await _preparePlatform();
       await HomeWidget.saveWidgetData<String>('widget_language', languageCode);
       await HomeWidget.saveWidgetData<bool>('widget_use_24h', use24HourFormat);
+      await _refreshAll();
     } catch (e) {
       debugPrint('Error saving widget preferences: $e');
     }
@@ -72,10 +79,12 @@ class WidgetService {
 
   static Future<void> saveLocation(String locationName) async {
     try {
+      await _preparePlatform();
       await HomeWidget.saveWidgetData<String>(
         'widget_location',
         locationName.trim(),
       );
+      await _refreshAll();
     } catch (e) {
       debugPrint('Error saving widget location: $e');
     }
@@ -86,6 +95,7 @@ class WidgetService {
     required bool use24HourFormat,
   }) async {
     try {
+      await _preparePlatform();
       await HomeWidget.saveWidgetData<String>('prayer_schedule_json', '[]');
       await HomeWidget.saveWidgetData<String>('widget_timezone', '');
       await HomeWidget.saveWidgetData<String>('widget_location', '');
@@ -149,6 +159,7 @@ class WidgetService {
     required bool use24HourFormat,
   }) async {
     try {
+      await _preparePlatform();
       await HomeWidget.saveWidgetData<String>('current_time', currentTime);
       await HomeWidget.saveWidgetData<String>('next_prayer', nextPrayer);
       await HomeWidget.saveWidgetData<String>('time_left', timeLeft);
@@ -169,8 +180,22 @@ class WidgetService {
     }
   }
 
+  static Future<void> _preparePlatform() async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await HomeWidget.setAppGroupId(iOSAppGroupId);
+    }
+  }
+
   static Future<void> _refreshAll() async {
-    for (final name in _widgetNames) {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await HomeWidget.updateWidget(
+        name: _iOSWidgetName,
+        iOSName: _iOSWidgetName,
+      );
+      return;
+    }
+
+    for (final name in _androidWidgetNames) {
       await HomeWidget.updateWidget(name: name, androidName: name);
     }
   }
