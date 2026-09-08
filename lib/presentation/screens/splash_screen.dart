@@ -53,17 +53,24 @@ class _SplashScreenState extends State<SplashScreen>
     final lang = prefs.getString('language');
 
     final Widget nextScreen;
+    final String nextRouteName;
     if (lang == null) {
       nextScreen = const LanguageSelectionScreen();
+      nextRouteName = '/language';
     } else if (isFirstRun) {
       nextScreen = const OnboardingScreen();
+      nextRouteName = '/onboarding';
     } else {
       nextScreen = const HomeScreen();
+      nextRouteName = '/home';
     }
 
     if (mounted) {
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => nextScreen),
+        MaterialPageRoute(
+          settings: RouteSettings(name: nextRouteName),
+          builder: (_) => nextScreen,
+        ),
       );
     }
   }
