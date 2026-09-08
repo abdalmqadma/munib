@@ -26,13 +26,20 @@ import 'presentation/widgets/analytics_app_tracker.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  PushNotificationService.registerBackgroundHandler();
   await initializeDateFormatting('ar', null);
   await initializeDateFormatting('en', null);
   await Hive.initFlutter();
   if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(PrayerDayAdapter());
   await NotificationService.init();
-  await PushNotificationService.init();
+
+  try {
+    PushNotificationService.registerBackgroundHandler();
+    await PushNotificationService.init();
+  } catch (error) {
+    // Push delivery is best-effort. A temporary FCM/APNs problem must never
+    // prevent Munib, prayer times, or local notifications from starting.
+    debugPrint('FCM initialization skipped: $error');
+  }
 
   runApp(
     MultiProvider(
