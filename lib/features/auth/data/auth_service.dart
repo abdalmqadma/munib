@@ -117,6 +117,41 @@ class AuthService {
   bool isPasswordUser(User user) =>
       user.providerData.any((provider) => provider.providerId == 'password');
 
+  bool isGoogleUser(User user) =>
+      user.providerData.any((provider) => provider.providerId == 'google.com');
+
+  Future<void> changePassword({
+    required User user,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (!isPasswordUser(user)) {
+      throw FirebaseAuthException(code: 'password-provider-required');
+    }
+
+    final email = user.email?.trim();
+    if (email == null || email.isEmpty) {
+      throw FirebaseAuthException(code: 'missing-email');
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
+
+    // Password changes are security-sensitive. Always prove possession of the
+    // current password immediately before updating it instead of relying only
+    // on how recently the app session was created.
+    await user
+        .reauthenticateWithCredential(credential)
+        .timeout(const Duration(seconds: 20));
+    await user.updatePassword(newPassword).timeout(const Duration(seconds: 20));
+
+    // Refresh the token after the credential change so subsequent authenticated
+    // requests use fresh account state.
+    await user.getIdToken(true);
+  }
+
   Future<void> signOutUnverifiedPasswordUser() async {
     final user = _auth.currentUser;
     if (user == null || !isPasswordUser(user)) return;
