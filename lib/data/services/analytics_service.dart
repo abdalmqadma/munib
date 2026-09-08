@@ -131,7 +131,11 @@ class MunibAnalyticsObserver extends NavigatorObserver {
 
     final routeName = route.settings.name;
     final screen = switch (routeName) {
-      '/' || '/splash' => const AnalyticsDestination(
+      '/' => const AnalyticsDestination(
+          screenName: 'splash',
+          screenClass: 'SplashScreen',
+        ),
+      '/splash' => const AnalyticsDestination(
           screenName: 'splash',
           screenClass: 'SplashScreen',
         ),
