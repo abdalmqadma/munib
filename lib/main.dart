@@ -22,6 +22,7 @@ import 'presentation/providers/prayer_provider.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/screens/splash_screen.dart';
 import 'presentation/widgets/analytics_app_tracker.dart';
+import 'presentation/widgets/app_update_prompt.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,6 +62,7 @@ class ImsakiahApp extends StatefulWidget {
 
 class _ImsakiahAppState extends State<ImsakiahApp> {
   static final _analyticsObserver = MunibAnalyticsObserver();
+  static final _appUpdateObserver = AppUpdateNavigatorObserver();
 
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -194,7 +196,7 @@ class _ImsakiahAppState extends State<ImsakiahApp> {
         GlobalCupertinoLocalizations.delegate,
       ],
       localeResolutionCallback: (locale, supportedLocales) => prayerProvider.locale,
-      navigatorObservers: [_analyticsObserver],
+      navigatorObservers: [_analyticsObserver, _appUpdateObserver],
       home: const SplashScreen(),
     );
   }
