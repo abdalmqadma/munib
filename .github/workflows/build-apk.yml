@@ -2,7 +2,7 @@ name: Munib Code Checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/remote-config-updates]
     paths:
       - "lib/**"
       - "android/**"
@@ -43,6 +43,9 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Show lockfile delta
+        run: git diff -- pubspec.lock || true
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
