@@ -56,9 +56,6 @@ class PushNotificationService {
   static final StreamController<PushDestination> _openedController =
       StreamController<PushDestination>.broadcast();
 
-  static StreamSubscription<RemoteMessage>? _foregroundSubscription;
-  static StreamSubscription<RemoteMessage>? _openedSubscription;
-  static StreamSubscription<String>? _tokenSubscription;
   static Timer? _topicRetryTimer;
   static bool _initialized = false;
   static bool _topicSubscriptionInFlight = false;
@@ -87,14 +84,14 @@ class PushNotificationService {
       sound: false,
     );
 
-    _foregroundSubscription = FirebaseMessaging.onMessage.listen((message) {
+    FirebaseMessaging.onMessage.listen((message) {
       final push = PushMessage.fromRemoteMessage(message);
       if (push.hasVisibleContent) {
         _foregroundController.add(push);
       }
     });
 
-    _openedSubscription = FirebaseMessaging.onMessageOpenedApp.listen((message) {
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
       final destination =
           PushNavigationService.destinationFromData(message.data);
       if (destination != null) {
@@ -102,7 +99,7 @@ class PushNotificationService {
       }
     });
 
-    _tokenSubscription = _messaging.onTokenRefresh.listen((_) {
+    _messaging.onTokenRefresh.listen((_) {
       _topicRetryCount = 0;
       unawaited(_subscribeToGeneralTopic());
     });
