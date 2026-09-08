@@ -141,6 +141,7 @@ class AuthService {
     bool isNew = false,
   }) async {
     try {
+      final ref = _firestore.collection('users').doc(user.uid);
       final rawName = nameOverride ?? user.displayName;
       final normalizedName =
           rawName == null ? null : normalizeDisplayName(rawName);
@@ -149,7 +150,28 @@ class AuthService {
         'email_verified': user.emailVerified,
         'last_login': FieldValue.serverTimestamp(),
       };
-      if (normalizedName != null && isValidDisplayName(normalizedName)) {
+
+      // Firestore becomes the canonical name once a valid profile name exists.
+      // This prevents an older Firebase Auth displayName from overwriting a
+      // user-approved rename during later sign-ins.
+      var shouldWriteName = isNew;
+      if (!isNew &&
+          normalizedName != null &&
+          isValidDisplayName(normalizedName)) {
+        try {
+          final existing = await ref.get().timeout(const Duration(seconds: 8));
+          final savedName = existing.data()?['name'];
+          shouldWriteName = !existing.exists ||
+              savedName is! String ||
+              !isValidDisplayName(savedName);
+        } catch (_) {
+          shouldWriteName = false;
+        }
+      }
+
+      if (shouldWriteName &&
+          normalizedName != null &&
+          isValidDisplayName(normalizedName)) {
         data['name'] = normalizedName;
       }
 
@@ -158,9 +180,7 @@ class AuthService {
         data['score'] = 0;
       }
 
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
+      await ref
           .set(data, SetOptions(merge: true))
           .timeout(const Duration(seconds: 8));
     } catch (_) {}
