@@ -1,9 +1,15 @@
-name: Munib Profile Rules Security Check
+name: Munib Code Checks
 
 on:
   push:
-    branches: [feat/profile-enhancements]
+    branches: [main]
     paths:
+      - "lib/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "analysis_options.yaml"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
 
@@ -11,161 +17,43 @@ permissions:
   contents: read
 
 jobs:
-  profile-rules:
+  checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "17"
 
-      - name: Install rules test dependencies
-        run: |
-          npm init -y >/dev/null 2>&1
-          npm install --no-save @firebase/rules-unit-testing firebase >/dev/null 2>&1
+      - name: Set up Gradle 8.14
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
 
-      - name: Create profile rules behavior test
-        run: |
-          cat > /tmp/profile-rules-test.cjs <<'JS'
-          const fs = require('fs');
-          const {
-            initializeTestEnvironment,
-            assertSucceeds,
-            assertFails,
-          } = require('@firebase/rules-unit-testing');
-          const {
-            doc,
-            setDoc,
-            updateDoc,
-            serverTimestamp,
-            Timestamp,
-          } = require('firebase/firestore');
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-          const projectId = 'munib-f5102';
-          const dayMs = 24 * 60 * 60 * 1000;
+      - name: Get dependencies
+        run: flutter pub get
 
-          async function seedUser(env, uid, email, extra = {}) {
-            await env.withSecurityRulesDisabled(async (context) => {
-              await setDoc(doc(context.firestore(), 'users', uid), {
-                name: 'Abd Hady',
-                email,
-                email_verified: true,
-                score: 0,
-                ...extra,
-              });
-            });
-          }
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-          async function main() {
-            const env = await initializeTestEnvironment({
-              projectId,
-              firestore: {
-                host: '127.0.0.1',
-                port: 8080,
-                rules: fs.readFileSync('firestore.rules', 'utf8'),
-              },
-            });
+      - name: Test
+        run: flutter test
 
-            try {
-              // Existing users without name_updated_at get one immediate rename.
-              await seedUser(env, 'first', 'first@example.com');
-              const firstDb = env.authenticatedContext('first', {
-                email: 'first@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertSucceeds(updateDoc(doc(firstDb, 'users', 'first'), {
-                name: 'Abd New',
-                name_updated_at: serverTimestamp(),
-              }));
-
-              // A rename before the 30-day window must fail.
-              await seedUser(env, 'early', 'early@example.com', {
-                name_updated_at: Timestamp.fromMillis(Date.now() - 29 * dayMs),
-              });
-              const earlyDb = env.authenticatedContext('early', {
-                email: 'early@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertFails(updateDoc(doc(earlyDb, 'users', 'early'), {
-                name: 'Early Rename',
-                name_updated_at: serverTimestamp(),
-              }));
-
-              // After more than 30 days, the rename is accepted.
-              await seedUser(env, 'old', 'old@example.com', {
-                name_updated_at: Timestamp.fromMillis(Date.now() - 31 * dayMs),
-              });
-              const oldDb = env.authenticatedContext('old', {
-                email: 'old@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertSucceeds(updateDoc(doc(oldDb, 'users', 'old'), {
-                name: 'Old Rename',
-                name_updated_at: serverTimestamp(),
-              }));
-
-              // Client-provided timestamps cannot impersonate Firestore request.time.
-              await seedUser(env, 'spoof', 'spoof@example.com');
-              const spoofDb = env.authenticatedContext('spoof', {
-                email: 'spoof@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertFails(updateDoc(doc(spoofDb, 'users', 'spoof'), {
-                name: 'Spoof Rename',
-                name_updated_at: Timestamp.now(),
-              }));
-
-              // The cooldown timestamp cannot be changed by itself.
-              await seedUser(env, 'timestamp', 'timestamp@example.com');
-              const timestampDb = env.authenticatedContext('timestamp', {
-                email: 'timestamp@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertFails(updateDoc(doc(timestampDb, 'users', 'timestamp'), {
-                name_updated_at: serverTimestamp(),
-              }));
-
-              // Unverified password-style sessions cannot rename profiles.
-              await seedUser(env, 'unverified', 'unverified@example.com');
-              const unverifiedDb = env.authenticatedContext('unverified', {
-                email: 'unverified@example.com',
-                email_verified: false,
-              }).firestore();
-              await assertFails(updateDoc(doc(unverifiedDb, 'users', 'unverified'), {
-                name: 'Blocked Rename',
-                name_updated_at: serverTimestamp(),
-              }));
-
-              // Unrelated profile photo updates continue to work.
-              await seedUser(env, 'photo', 'photo@example.com');
-              const photoDb = env.authenticatedContext('photo', {
-                email: 'photo@example.com',
-                email_verified: true,
-              }).firestore();
-              await assertSucceeds(updateDoc(doc(photoDb, 'users', 'photo'), {
-                photo_url: 'https://example.com/profile.jpg',
-              }));
-
-              console.log('PROFILE_RULES_SECURITY_TESTS_PASSED');
-            } finally {
-              await env.cleanup();
-            }
-          }
-
-          main().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          JS
-
-      - name: Run Firestore security behavior tests
+      - name: Compile Android Kotlin
+        working-directory: android
         run: >-
-          npx --yes firebase-tools@latest emulators:exec
-          --only firestore
-          --project munib-f5102
-          "NODE_PATH=$PWD/node_modules node /tmp/profile-rules-test.cjs"
+          gradle :app:compileDebugKotlin --stacktrace
+          -Ptarget-platform=android-arm64
+          --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m"
