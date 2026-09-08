@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#C7A24C" />
+  <title>إعادة تعيين كلمة المرور | منيب</title>
+  <style>
+    :root{color-scheme:light dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1720;color:#f5f2e8;padding:20px}
+    main{width:min(100%,460px);background:#17212b;border:1px solid #39424b;border-radius:24px;padding:28px;box-shadow:0 18px 50px #0005}
+    .brand{font-size:30px;font-weight:800;color:#d7b55b;text-align:center;margin-bottom:6px}.sub{text-align:center;color:#b8c0c8;margin:0 0 24px}
+    label{display:block;margin:14px 0 7px;font-weight:650}input{width:100%;padding:14px 15px;border-radius:14px;border:1px solid #4d5862;background:#111922;color:#fff;font-size:16px}
+    button{width:100%;margin-top:18px;padding:14px 16px;border:0;border-radius:14px;background:#d7b55b;color:#19160d;font-size:16px;font-weight:800;cursor:pointer}
+    button.secondary{background:transparent;color:#d7b55b;border:1px solid #6b5a2e}.msg{margin-top:16px;padding:13px 14px;border-radius:14px;background:#202c37;line-height:1.6}.error{background:#3b2023;color:#ffdadd}.ok{background:#18352b;color:#d9ffed}.hidden{display:none}.email{direction:ltr;text-align:center;color:#d7b55b;word-break:break-all}.small{font-size:13px;color:#aeb7c0;line-height:1.6}a{color:#d7b55b}
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">مُنِيب</div>
+  <p class="sub">إعادة تعيين كلمة المرور</p>
+
+  <section id="loading"><div class="msg">جارٍ التحقق من رابط إعادة التعيين…</div></section>
+
+  <section id="reset" class="hidden">
+    <p>الحساب:</p>
+    <p id="accountEmail" class="email"></p>
+    <form id="resetForm">
+      <label for="password">كلمة المرور الجديدة</label>
+      <input id="password" type="password" autocomplete="new-password" minlength="8" required />
+      <label for="confirm">تأكيد كلمة المرور الجديدة</label>
+      <input id="confirm" type="password" autocomplete="new-password" minlength="8" required />
+      <p class="small">استخدم 8 أحرف على الأقل، وتأكد من وجود حرف ورقم.</p>
+      <button id="submitButton" type="submit">حفظ كلمة المرور الجديدة</button>
+    </form>
+    <div id="resetMessage" class="msg hidden"></div>
+  </section>
+
+  <section id="done" class="hidden">
+    <div class="msg ok">تم تغيير كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول إلى منيب بكلمة المرور الجديدة.</div>
+  </section>
+
+  <section id="invalid" class="hidden">
+    <div class="msg error">هذا الرابط غير صالح، أو انتهت صلاحيته، أو تم استخدامه من قبل.</div>
+    <p class="small">اكتب بريد حسابك لطلب رابط جديد.</p>
+    <form id="resendForm">
+      <label for="resendEmail">البريد الإلكتروني</label>
+      <input id="resendEmail" type="email" autocomplete="email" required />
+      <button class="secondary" type="submit">إرسال رابط جديد</button>
+    </form>
+    <div id="resendMessage" class="msg hidden"></div>
+  </section>
+</main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('mode');
+  const oobCode = params.get('oobCode');
+  const apiKey = params.get('apiKey');
+  const loading = document.getElementById('loading');
+  const reset = document.getElementById('reset');
+  const invalid = document.getElementById('invalid');
+  const done = document.getElementById('done');
+  const accountEmail = document.getElementById('accountEmail');
+  const resetMessage = document.getElementById('resetMessage');
+  const resendMessage = document.getElementById('resendMessage');
+
+  const show = el => { loading.classList.add('hidden'); reset.classList.add('hidden'); invalid.classList.add('hidden'); done.classList.add('hidden'); el.classList.remove('hidden'); };
+  const errorCode = data => data?.error?.message || 'UNKNOWN_ERROR';
+  const endpoint = () => `https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=${encodeURIComponent(apiKey || '')}`;
+
+  async function post(url, body) {
+    const response = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(errorCode(data));
+    return data;
+  }
+
+  async function verifyCode() {
+    if (mode !== 'resetPassword' || !oobCode || !apiKey) {
+      show(invalid); return;
+    }
+    try {
+      const data = await post(endpoint(), {oobCode});
+      accountEmail.textContent = data.email || '';
+      document.getElementById('resendEmail').value = data.email || '';
+      show(reset);
+    } catch (_) {
+      show(invalid);
+    }
+  }
+
+  document.getElementById('resetForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    resetMessage.classList.add('hidden');
+    const password = document.getElementById('password').value;
+    const confirm = document.getElementById('confirm').value;
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      resetMessage.textContent = 'كلمة المرور يجب أن تكون 8 أحرف على الأقل وتحتوي على حرف ورقم.';
+      resetMessage.className = 'msg error'; return;
+    }
+    if (password !== confirm) {
+      resetMessage.textContent = 'كلمتا المرور غير متطابقتين.';
+      resetMessage.className = 'msg error'; return;
+    }
+    const button = document.getElementById('submitButton'); button.disabled = true;
+    try {
+      await post(endpoint(), {oobCode, newPassword: password});
+      show(done);
+    } catch (error) {
+      const code = String(error.message || '');
+      if (code.includes('EXPIRED_OOB_CODE') || code.includes('INVALID_OOB_CODE')) show(invalid);
+      else {
+        resetMessage.textContent = code.includes('WEAK_PASSWORD') ? 'كلمة المرور ضعيفة. اختر كلمة أقوى.' : 'تعذر تغيير كلمة المرور. حاول مرة أخرى.';
+        resetMessage.className = 'msg error';
+      }
+    } finally { button.disabled = false; }
+  });
+
+  document.getElementById('resendForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const email = document.getElementById('resendEmail').value.trim();
+    resendMessage.classList.add('hidden');
+    if (!apiKey) {
+      resendMessage.textContent = 'تعذر إرسال الرابط من هذه الصفحة. افتح منيب واطلب إعادة التعيين من شاشة تسجيل الدخول.';
+      resendMessage.className = 'msg error'; return;
+    }
+    try {
+      await post(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${encodeURIComponent(apiKey)}`, {requestType:'PASSWORD_RESET',email});
+    } catch (error) {
+      const code = String(error.message || '');
+      if (!code.includes('EMAIL_NOT_FOUND')) {
+        resendMessage.textContent = 'تعذر إرسال الرسالة الآن. حاول مرة أخرى لاحقًا.';
+        resendMessage.className = 'msg error'; return;
+      }
+    }
+    resendMessage.textContent = 'إذا كان البريد مرتبطًا بحساب في منيب، ستصلك رسالة إعادة تعيين جديدة.';
+    resendMessage.className = 'msg ok';
+  });
+
+  verifyCode();
+})();
+</script>
+</body>
+</html>
