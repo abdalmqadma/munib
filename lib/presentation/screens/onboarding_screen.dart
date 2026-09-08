@@ -27,7 +27,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     await prefs.setBool('isFirstRun', false);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/home'),
+        builder: (_) => const HomeScreen(),
+      ),
     );
   }
 
