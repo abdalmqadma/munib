@@ -159,7 +159,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.outgoing_mail_rounded),
+                : const Icon(Icons.outgoing_mail),
             label: Text(t('إرسال رابط إعادة التعيين', 'Send reset link')),
           ),
         ],
