@@ -51,7 +51,10 @@ class LanguageSelectionScreen extends StatelessWidget {
           if (context.mounted) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const SplashScreen()),
+              MaterialPageRoute(
+                settings: const RouteSettings(name: '/splash'),
+                builder: (_) => const SplashScreen(),
+              ),
             );
           }
         },
