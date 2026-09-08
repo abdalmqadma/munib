@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -420,6 +421,27 @@ class _AuthScreenState extends State<AuthScreen> {
                         return null;
                       },
                     ),
+                    if (isLogin)
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: TextButton(
+                          onPressed: isLoading
+                              ? null
+                              : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ForgotPasswordScreen(
+                                        initialEmail: _emailController.text,
+                                      ),
+                                    ),
+                                  ),
+                          child: Text(
+                            Localizations.localeOf(context).languageCode == 'ar'
+                                ? 'نسيت كلمة المرور؟'
+                                : 'Forgot password?',
+                          ),
+                        ),
+                      ),
                     if (!isLogin) ...[
                       const SizedBox(height: 16),
                       TextFormField(
