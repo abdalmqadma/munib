@@ -10,6 +10,7 @@ import '../../data/services/auth_service.dart';
 import '../../data/services/profile_photo_service.dart';
 import '../../data/services/profile_service.dart';
 import 'auth_screen.dart';
+import 'change_password_screen.dart';
 import 'home_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -320,6 +321,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               user.providerData.map((item) => item.providerId),
               isArabic: _isArabic,
             );
+            final hasPasswordProvider = _auth.isPasswordUser(user);
+            final isGoogleOnly =
+                !hasPasswordProvider && _auth.isGoogleUser(user);
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -453,6 +457,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: t('طريقة تسجيل الدخول', 'Sign-in method'),
                   value: provider,
                 ),
+                const SizedBox(height: 12),
+                if (hasPasswordProvider)
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final changed = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChangePasswordScreen(user: user),
+                        ),
+                      );
+                      if (changed == true && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              t(
+                                'تم تغيير كلمة المرور بنجاح.',
+                                'Password changed successfully.',
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.lock_reset_rounded),
+                    label: Text(
+                      t('تغيير كلمة المرور', 'Change password'),
+                    ),
+                  )
+                else if (isGoogleOnly)
+                  _InfoTile(
+                    icon: Icons.lock_outline_rounded,
+                    title: t('كلمة المرور', 'Password'),
+                    value: t(
+                      'تُدار كلمة المرور بواسطة Google',
+                      'Password is managed by Google',
+                    ),
+                  ),
                 const SizedBox(height: 28),
                 OutlinedButton.icon(
                   onPressed: () async {
