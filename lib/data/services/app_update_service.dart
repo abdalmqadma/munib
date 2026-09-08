@@ -128,7 +128,7 @@ class AppUpdateService {
     }
 
     try {
-      return launchUrl(uri, mode: LaunchMode.externalApplication);
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (error) {
       debugPrint('Unable to open update URL: $error');
       return false;
