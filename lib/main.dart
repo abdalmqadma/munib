@@ -12,6 +12,8 @@ import 'core/app_theme.dart';
 import 'presentation/providers/prayer_provider.dart';
 import 'features/settings/presentation/theme_provider.dart';
 import 'presentation/screens/splash_screen.dart';
+import 'presentation/widgets/analytics_app_tracker.dart';
+import 'data/services/analytics_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/models/prayer_day.dart';
 
@@ -30,13 +32,15 @@ void main() async {
         ChangeNotifierProvider(create: (_) => PrayerProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
-      child: const ImsakiahApp(),
+      child: const AnalyticsAppTracker(child: ImsakiahApp()),
     ),
   );
 }
 
 class ImsakiahApp extends StatelessWidget {
   const ImsakiahApp({super.key});
+
+  static final _analyticsObserver = MunibAnalyticsObserver();
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +75,7 @@ class ImsakiahApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       localeResolutionCallback: (locale, supportedLocales) => prayerProvider.locale,
+      navigatorObservers: [_analyticsObserver],
       home: const SplashScreen(),
     );
   }
