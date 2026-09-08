@@ -2,7 +2,7 @@ name: Munib Code Checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/firebase-analytics]
     paths:
       - "lib/**"
       - "android/**"
