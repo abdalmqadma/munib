@@ -2,16 +2,9 @@ name: Munib Code Checks
 
 on:
   push:
-    branches: [main]
+    branches: [feat/fcm-push-notifications]
     paths:
-      - "lib/**"
-      - "android/**"
-      - "assets/**"
-      - "test/**"
-      - "pubspec.yaml"
-      - "analysis_options.yaml"
       - ".github/workflows/build-apk.yml"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -43,6 +36,35 @@ jobs:
 
       - name: Get dependencies
         run: flutter pub get
+
+      - name: Print Firebase Messaging lock entries
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          lines = Path('pubspec.lock').read_text().splitlines()
+          targets = {
+              'firebase_messaging',
+              'firebase_messaging_platform_interface',
+              'firebase_messaging_web',
+          }
+          i = 0
+          while i < len(lines):
+              match = re.match(r'^  ([a-zA-Z0-9_]+):$', lines[i])
+              if match and match.group(1) in targets:
+                  start = i
+                  i += 1
+                  while i < len(lines) and not re.match(
+                      r'^  [a-zA-Z0-9_]+:$', lines[i]
+                  ):
+                      i += 1
+                  print('\n'.join(lines[start:i]))
+                  print('---')
+                  continue
+              i += 1
+          PY
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
