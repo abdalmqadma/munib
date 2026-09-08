@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -129,7 +128,7 @@ class PushNotificationService {
     _topicSubscriptionInFlight = true;
 
     try {
-      if (Platform.isIOS) {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
         final apnsToken = await _messaging.getAPNSToken();
         if (apnsToken == null) {
           _scheduleTopicRetry();
