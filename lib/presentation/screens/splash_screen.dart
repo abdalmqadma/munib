@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/services/auth_service.dart';
+import '../../data/services/push_notification_service.dart';
 import 'home_screen.dart';
 import 'language_selection_screen.dart';
 import 'onboarding_screen.dart';
@@ -61,7 +62,13 @@ class _SplashScreenState extends State<SplashScreen>
       nextScreen = const OnboardingScreen();
       nextRouteName = '/onboarding';
     } else {
-      nextScreen = const HomeScreen();
+      final pushDestination =
+          PushNotificationService.takeDeferredDestination();
+      nextScreen = HomeScreen(
+        initialIndex: pushDestination?.homeIndex ?? 0,
+        initialAzkarCategory:
+            pushDestination?.initialAzkarCategory ?? 'Morning',
+      );
       nextRouteName = '/home';
     }
 
@@ -134,7 +141,8 @@ class _MunibVectorPainter extends CustomPainter {
           radius: outerRadius * .82,
         ),
       );
-    final crescentPath = Path.combine(PathOperation.difference, crescent, cutout);
+    final crescentPath =
+        Path.combine(PathOperation.difference, crescent, cutout);
     canvas.drawPath(crescentPath, paint);
 
     final starCenter = Offset(size.width * .72, size.height * .28);
