@@ -48,6 +48,7 @@ class PushNotificationService {
   const PushNotificationService._();
 
   static const generalTopic = 'munib_general';
+  static const _maxTopicRetries = 6;
 
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   static final StreamController<PushMessage> _foregroundController =
@@ -61,6 +62,7 @@ class PushNotificationService {
   static Timer? _topicRetryTimer;
   static bool _initialized = false;
   static bool _topicSubscriptionInFlight = false;
+  static int _topicRetryCount = 0;
 
   static Stream<PushMessage> get foregroundMessages =>
       _foregroundController.stream;
@@ -101,6 +103,7 @@ class PushNotificationService {
     });
 
     _tokenSubscription = _messaging.onTokenRefresh.listen((_) {
+      _topicRetryCount = 0;
       unawaited(_subscribeToGeneralTopic());
     });
 
@@ -138,6 +141,7 @@ class PushNotificationService {
       }
 
       await _messaging.subscribeToTopic(generalTopic);
+      _topicRetryCount = 0;
       _topicRetryTimer?.cancel();
       _topicRetryTimer = null;
     } catch (error) {
@@ -149,6 +153,8 @@ class PushNotificationService {
   }
 
   static void _scheduleTopicRetry() {
+    if (_topicRetryCount >= _maxTopicRetries) return;
+    _topicRetryCount += 1;
     _topicRetryTimer?.cancel();
     _topicRetryTimer = Timer(const Duration(seconds: 5), () {
       unawaited(_subscribeToGeneralTopic());
