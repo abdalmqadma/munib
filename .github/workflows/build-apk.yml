@@ -2,7 +2,7 @@ name: Munib Code Checks
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/profile-enhancements]
     paths:
       - "lib/**"
       - "android/**"
@@ -10,6 +10,7 @@ on:
       - "test/**"
       - "pubspec.yaml"
       - "analysis_options.yaml"
+      - "firestore.rules"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
 
@@ -29,6 +30,13 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Validate Firestore rules
+        run: >-
+          npx --yes firebase-tools@latest emulators:exec
+          --only firestore
+          --project munib-f5102
+          "echo firestore-rules-ok"
 
       - name: Set up Gradle 8.14
         uses: gradle/actions/setup-gradle@v4
