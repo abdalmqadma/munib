@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/profile_photo_service.dart';
+import '../../data/services/profile_service.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
 
@@ -18,9 +21,26 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool photoBusy = false;
+  bool nameBusy = false;
   bool _clearingUnverifiedSession = false;
+  Timer? _cooldownTicker;
   final _profilePhotoService = ProfilePhotoService();
+  final _profileService = ProfileService();
   final _auth = AuthService();
+
+  @override
+  void initState() {
+    super.initState();
+    _cooldownTicker = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _cooldownTicker?.cancel();
+    super.dispose();
+  }
 
   void _clearUnverifiedSession() {
     if (_clearingUnverifiedSession) return;
@@ -84,6 +104,145 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _changeName({
+    required User user,
+    required String currentName,
+    required DateTime? lastChangedAt,
+  }) async {
+    final remaining = profileNameChangeRemaining(lastChangedAt);
+    if (remaining > Duration.zero) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            formatProfileNameCooldown(remaining, isArabic: _isArabic),
+          ),
+        ),
+      );
+      return;
+    }
+
+    final controller = TextEditingController(text: currentName);
+    final formKey = GlobalKey<FormState>();
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(t('تغيير الاسم', 'Change name')),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: controller,
+            autofocus: true,
+            maxLength: AuthService.maxDisplayNameLength,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              labelText: t('الاسم', 'Name'),
+              helperText: t(
+                'يمكن تغيير الاسم مرة واحدة كل 30 يومًا.',
+                'You can change your name once every 30 days.',
+              ),
+            ),
+            validator: (value) {
+              if (!AuthService.isValidDisplayName(value ?? '')) {
+                return t(
+                  'اكتب اسمًا صحيحًا بالحروف فقط.',
+                  'Enter a valid name using letters only.',
+                );
+              }
+              return null;
+            },
+            onFieldSubmitted: (_) {
+              if (formKey.currentState?.validate() == true) {
+                Navigator.of(dialogContext).pop(
+                  AuthService.normalizeDisplayName(controller.text),
+                );
+              }
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(t('إلغاء', 'Cancel')),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() != true) return;
+              Navigator.of(dialogContext).pop(
+                AuthService.normalizeDisplayName(controller.text),
+              );
+            },
+            child: Text(t('حفظ', 'Save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (newName == null || !mounted) return;
+    if (AuthService.normalizeDisplayName(newName) ==
+        AuthService.normalizeDisplayName(currentName)) {
+      return;
+    }
+
+    setState(() => nameBusy = true);
+    try {
+      await _profileService.changeDisplayName(user: user, newName: newName);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(t('تم تغيير الاسم.', 'Name updated.')),
+        ),
+      );
+    } on ProfileNameChangeException catch (error) {
+      if (!mounted) return;
+      final cooldown = error.remaining ?? profileNameChangeCooldown;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.code == 'name-change-cooldown'
+                ? formatProfileNameCooldown(cooldown, isArabic: _isArabic)
+                : t('تعذر تغيير الاسم.', 'Could not update the name.'),
+          ),
+        ),
+      );
+    } on FirebaseException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error.code == 'permission-denied'
+                ? t(
+                    'لا يمكن تغيير الاسم قبل مرور 30 يومًا من آخر تغيير.',
+                    'The name cannot be changed until 30 days after the last change.',
+                  )
+                : t('تعذر تغيير الاسم.', 'Could not update the name.'),
+          ),
+        ),
+      );
+    } on FormatException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            t(
+              'الاسم غير صالح. استخدم الحروف والمسافات فقط.',
+              'Invalid name. Use letters and spaces only.',
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(t('تعذر تغيير الاسم.', 'Could not update the name.')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => nameBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -139,16 +298,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final data = snapshot.data?.data();
             final savedName = data?['name'] as String?;
             final authName = user.displayName;
-            final name = AuthService.isValidDisplayName(savedName ?? '')
+            final hasSavedName = AuthService.isValidDisplayName(savedName ?? '');
+            final hasAuthName = AuthService.isValidDisplayName(authName ?? '');
+            final name = hasSavedName
                 ? AuthService.normalizeDisplayName(savedName!)
-                : (AuthService.isValidDisplayName(authName ?? '')
+                : (hasAuthName
                     ? AuthService.normalizeDisplayName(authName!)
                     : context.tr('munibUser'));
+            final editableName = hasSavedName
+                ? AuthService.normalizeDisplayName(savedName!)
+                : (hasAuthName ? AuthService.normalizeDisplayName(authName!) : '');
             final email = user.email ?? (data?['email'] as String?) ?? '';
             final savedPhoto = data?['photo_url'] as String?;
             final photo = savedPhoto?.trim().isNotEmpty == true
                 ? savedPhoto
                 : user.photoURL;
+            final lastNameChange = profileNameUpdatedAt(data);
+            final nameCooldown = profileNameChangeRemaining(lastNameChange);
+            final canChangeName = nameCooldown <= Duration.zero;
+            final provider = authProviderLabel(
+              user.providerData.map((item) => item.providerId),
+              isArabic: _isArabic,
+            );
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -215,6 +386,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         const SizedBox(height: 6),
                         Text(
                           email,
+                          textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
@@ -234,18 +406,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 18),
                 _InfoTile(
+                  icon: Icons.badge_outlined,
+                  title: t('الاسم', 'Name'),
+                  value: name,
+                ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  onPressed: nameBusy || !canChangeName
+                      ? null
+                      : () => _changeName(
+                            user: user,
+                            currentName: editableName,
+                            lastChangedAt: lastNameChange,
+                          ),
+                  icon: nameBusy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.edit_note_rounded),
+                  label: Text(t('تغيير الاسم', 'Change name')),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  formatProfileNameCooldown(
+                    nameCooldown,
+                    isArabic: _isArabic,
+                  ),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: canChangeName
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant,
+                      ),
+                ),
+                const SizedBox(height: 18),
+                _InfoTile(
                   icon: Icons.email_outlined,
                   title: context.tr('email'),
                   value: email.isEmpty ? context.tr('notAvailable') : email,
                 ),
                 const SizedBox(height: 12),
                 _InfoTile(
-                  icon: Icons.verified_user_outlined,
-                  title: context.tr('accountType'),
-                  value: user.providerData
-                          .any((provider) => provider.providerId == 'google.com')
-                      ? 'Google'
-                      : context.tr('emailAccount'),
+                  icon: Icons.login_rounded,
+                  title: t('طريقة تسجيل الدخول', 'Sign-in method'),
+                  value: provider,
                 ),
                 const SizedBox(height: 28),
                 OutlinedButton.icon(
