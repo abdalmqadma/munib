@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/app_strings.dart';
 import '../../data/services/auth_service.dart';
+import 'email_verification_screen.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 
@@ -28,6 +29,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool obscurePassword = true;
   bool awaitingVerification = false;
   String verificationEmail = '';
+  String verificationUid = '';
+  bool verificationInitialMessageJustSent = false;
 
   @override
   void dispose() {
@@ -57,6 +60,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
+      final wasLogin = isLogin;
       final user = isLogin
           ? await _auth.signInWithEmail(email, password)
           : await _auth.registerWithEmail(
@@ -70,6 +74,8 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_auth.isPasswordUser(user) && !user.emailVerified) {
         setState(() {
           verificationEmail = user.email ?? email;
+          verificationUid = user.uid;
+          verificationInitialMessageJustSent = !wasLogin;
           awaitingVerification = true;
         });
         return;
@@ -106,11 +112,13 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _resendVerification() async {
-    if (isLoading) return;
+  Future<bool> _resendVerification() async {
+    if (isLoading) return false;
     setState(() => isLoading = true);
+    var sent = false;
     try {
       await _auth.resendVerification();
+      sent = true;
       if (mounted) _showMessage(context.tr('verificationResent'));
     } on FirebaseAuthException catch (e) {
       if (mounted) _showMessage(_authError(e.code));
@@ -119,6 +127,7 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+    return sent;
   }
 
   Future<void> _leaveVerification() async {
@@ -136,6 +145,8 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
     setState(() {
       awaitingVerification = false;
+      verificationUid = '';
+      verificationInitialMessageJustSent = false;
       isLogin = true;
       _passwordController.clear();
       _confirmController.clear();
@@ -216,82 +227,14 @@ class _AuthScreenState extends State<AuthScreen> {
     final scheme = theme.colorScheme;
 
     if (awaitingVerification) {
-      return PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _leaveVerification();
-        },
-        child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            onPressed: isLoading ? null : _leaveVerification,
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-        ),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 92,
-                      height: 92,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: Icon(
-                        Icons.mark_email_read_outlined,
-                        size: 46,
-                        color: scheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      context.tr('verifyEmailTitle'),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context
-                          .tr('verifyEmailBody')
-                          .replaceAll('{email}', verificationEmail),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: isLoading ? null : _checkVerification,
-                        icon: const Icon(Icons.verified_rounded),
-                        label: Text(context.tr('iveVerified')),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: isLoading ? null : _resendVerification,
-                        icon: const Icon(Icons.outgoing_mail),
-                        label: Text(context.tr('resendVerification')),
-                      ),
-                    ),
-                    if (isLoading) ...[
-                      const SizedBox(height: 20),
-                      const CircularProgressIndicator(),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      return EmailVerificationScreen(
+        email: verificationEmail,
+        uid: verificationUid,
+        initialMessageJustSent: verificationInitialMessageJustSent,
+        busy: isLoading,
+        onCheckVerification: _checkVerification,
+        onResendVerification: _resendVerification,
+        onLeaveVerification: _leaveVerification,
       );
     }
 
