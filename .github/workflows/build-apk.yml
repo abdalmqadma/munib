@@ -1,171 +1,59 @@
-name: Munib Update Lockfile
+name: Munib Code Checks
 
 on:
   push:
-    branches: [feat/remote-config-updates]
+    branches: [main, feat/remote-config-updates]
     paths:
+      - "lib/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "analysis_options.yaml"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  update-lockfile:
+  checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
-          ref: feat/remote-config-updates
+          distribution: temurin
+          java-version: "17"
 
-      - name: Add only update-system packages to lockfile
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+      - name: Set up Gradle 8.14
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14"
 
-          path = Path('pubspec.lock')
-          text = path.read_text()
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-          remote = '''  firebase_remote_config:
-            dependency: "direct main"
-            description:
-              name: firebase_remote_config
-              sha256: e1635b1e8713f4a823920ec3a56a14034b90ce455d47746ab0da994857f370cf
-              url: "https://pub.dev"
-            source: hosted
-            version: "5.5.0"
-          firebase_remote_config_platform_interface:
-            dependency: transitive
-            description:
-              name: firebase_remote_config_platform_interface
-              sha256: ce836c5c62056edbe23ef501e6876691ee32476afd12fe95b76e57bba9d25485
-              url: "https://pub.dev"
-            source: hosted
-            version: "2.0.0"
-          firebase_remote_config_web:
-            dependency: transitive
-            description:
-              name: firebase_remote_config_web
-              sha256: "9dbd75024bfcd47c05046c95f9cf648a8fc862b096bcf8ea1e4b855d50ea19ad"
-              url: "https://pub.dev"
-            source: hosted
-            version: "1.8.9"
-          '''
+      - name: Get dependencies
+        run: flutter pub get
 
-          package_info = '''  package_info_plus:
-            dependency: "direct main"
-            description:
-              name: package_info_plus
-              sha256: "16eee997588c60225bda0488b6dcfac69280a6b7a3cf02c741895dd370a02968"
-              url: "https://pub.dev"
-            source: hosted
-            version: "8.3.1"
-          package_info_plus_platform_interface:
-            dependency: transitive
-            description:
-              name: package_info_plus_platform_interface
-              sha256: "202a487f08836a592a6bd4f901ac69b3a8f146af552bbd14407b6b41e1c3f086"
-              url: "https://pub.dev"
-            source: hosted
-            version: "3.2.1"
-          '''
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-          launcher = '''  url_launcher:
-            dependency: "direct main"
-            description:
-              name: url_launcher
-              sha256: f6a7e5c4835bb4e3026a04793a4199ca2d14c739ec378fdfe23fc8075d0439f8
-              url: "https://pub.dev"
-            source: hosted
-            version: "6.3.2"
-          url_launcher_android:
-            dependency: transitive
-            description:
-              name: url_launcher_android
-              sha256: "611e87fb320b70d1dd721dc46af89c98aceccea9b31fde49e084591414e0c610"
-              url: "https://pub.dev"
-            source: hosted
-            version: "6.3.33"
-          url_launcher_ios:
-            dependency: transitive
-            description:
-              name: url_launcher_ios
-              sha256: "8faa1aab294f1ab4040b43660c887b0418d5fa4f0cffef76a484e6aa1092eb4a"
-              url: "https://pub.dev"
-            source: hosted
-            version: "6.4.2"
-          url_launcher_linux:
-            dependency: transitive
-            description:
-              name: url_launcher_linux
-              sha256: "10f86fef4c2c43563fa6c211ff9cf757adf4d3ab762c56bd430664a947d70cd0"
-              url: "https://pub.dev"
-            source: hosted
-            version: "3.2.3"
-          url_launcher_macos:
-            dependency: transitive
-            description:
-              name: url_launcher_macos
-              sha256: "5e835a3b869c2d70325349c81c5a45c28e20791265b67b2669da6b08c5cd5201"
-              url: "https://pub.dev"
-            source: hosted
-            version: "3.2.6"
-          url_launcher_platform_interface:
-            dependency: transitive
-            description:
-              name: url_launcher_platform_interface
-              sha256: "552f8a1e663569be95a8190206a38187b531910283c3e982193e4f2733f01029"
-              url: "https://pub.dev"
-            source: hosted
-            version: "2.3.2"
-          url_launcher_web:
-            dependency: transitive
-            description:
-              name: url_launcher_web
-              sha256: "85c81589622fbc87c1c683aaea164d3604a7777495a79d91e39ffcdec39ddb34"
-              url: "https://pub.dev"
-            source: hosted
-            version: "2.4.3"
-          url_launcher_windows:
-            dependency: transitive
-            description:
-              name: url_launcher_windows
-              sha256: "6c5ad3f22cd4c38e089b81963b3cd7bb83b111b2df5dce008bb066162f42e429"
-              url: "https://pub.dev"
-            source: hosted
-            version: "3.1.6"
-          '''
+      - name: Test
+        run: flutter test
 
-          if '\n  firebase_remote_config:\n' not in text:
-              anchor = '  firebase_storage:\n'
-              if anchor not in text:
-                  raise SystemExit('firebase_storage anchor not found')
-              text = text.replace(anchor, remote + anchor, 1)
-
-          if '\n  package_info_plus:\n' not in text:
-              anchor = '  path:\n'
-              if anchor not in text:
-                  raise SystemExit('path anchor not found')
-              text = text.replace(anchor, package_info + anchor, 1)
-
-          if '\n  url_launcher:\n' not in text:
-              anchor = '  uuid:\n'
-              if anchor not in text:
-                  raise SystemExit('uuid anchor not found')
-              text = text.replace(anchor, launcher + anchor, 1)
-
-          path.write_text(text)
-          PY
-
-      - name: Commit lockfile
-        run: |
-          if git diff --quiet -- pubspec.lock; then
-            echo "Lockfile already contains required entries."
-            exit 0
-          fi
-          git config user.name "abdalmqadma"
-          git config user.email "226467043+abdalmqadma@users.noreply.github.com"
-          git add pubspec.lock
-          git commit -m "chore: lock app update dependencies"
-          git push origin HEAD:feat/remote-config-updates
+      - name: Compile Android Kotlin
+        working-directory: android
+        run: >-
+          gradle :app:compileDebugKotlin --stacktrace
+          -Ptarget-platform=android-arm64
+          --max-workers=2
+          -Dorg.gradle.jvmargs="-Xmx3072m -XX:MaxMetaspaceSize=768m"
