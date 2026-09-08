@@ -1,10 +1,17 @@
-name: Munib Code Checks Final
+name: Munib Code Checks
 
 on:
   push:
-    branches: [feat/fcm-push-notifications]
+    branches: [main]
     paths:
+      - "lib/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "analysis_options.yaml"
       - ".github/workflows/build-apk.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
