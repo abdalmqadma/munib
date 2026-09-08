@@ -35,6 +35,8 @@
         </activity>
 
         <meta-data android:name="flutterEmbedding" android:value="2" />
+        <meta-data android:name="google_analytics_automatic_screen_reporting_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
 
         <service
             android:name=".NafahatBubbleService"
