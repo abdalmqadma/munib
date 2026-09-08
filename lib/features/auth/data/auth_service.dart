@@ -14,6 +14,7 @@ class AuthService {
   static final RegExp _displayNamePattern = RegExp(
     r'^[A-Za-z\u0621-\u063A\u0641-\u064A ]+$',
   );
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   static String normalizeDisplayName(String value) =>
       value.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -25,6 +26,11 @@ class AuthService {
         normalized.length <= maxDisplayNameLength &&
         _displayNamePattern.hasMatch(normalized);
   }
+
+  static String normalizeEmail(String value) => value.trim();
+
+  static bool isValidEmail(String value) =>
+      _emailPattern.hasMatch(normalizeEmail(value));
 
   Stream<User?> get user => _auth.authStateChanges();
 
@@ -64,6 +70,25 @@ class AuthService {
       return refreshed;
     }
     return null;
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    final normalizedEmail = normalizeEmail(email);
+    if (!isValidEmail(normalizedEmail)) {
+      throw FirebaseAuthException(code: 'invalid-email');
+    }
+
+    try {
+      await _auth
+          .sendPasswordResetEmail(email: normalizedEmail)
+          .timeout(const Duration(seconds: 20));
+    } on FirebaseAuthException catch (error) {
+      // Keep the UI account-enumeration safe. Firebase may already suppress
+      // this error when Email Enumeration Protection is enabled, but older or
+      // differently configured projects can still report it.
+      if (error.code == 'user-not-found') return;
+      rethrow;
+    }
   }
 
   Future<void> resendVerification() async {
