@@ -25,11 +25,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java 21 for Firestore emulator
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Validate Firestore rules
         run: >-
@@ -37,6 +37,12 @@ jobs:
           --only firestore
           --project munib-f5102
           "echo firestore-rules-ok"
+
+      - name: Set up Java 17 for Android
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - name: Set up Gradle 8.14
         uses: gradle/actions/setup-gradle@v4
