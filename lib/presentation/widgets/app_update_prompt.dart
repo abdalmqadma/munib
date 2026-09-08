@@ -2,6 +2,30 @@ import 'package:flutter/material.dart';
 
 import '../../data/services/app_update_service.dart';
 
+class AppUpdateNavigatorObserver extends NavigatorObserver {
+  void _checkRoute(Route<dynamic>? route) {
+    if (route?.settings.name != '/home') return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final currentNavigator = navigator;
+      if (currentNavigator == null || !currentNavigator.mounted) return;
+      AppUpdatePrompt.showIfNeeded(currentNavigator.context);
+    });
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _checkRoute(route);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _checkRoute(newRoute);
+  }
+}
+
 class AppUpdatePrompt {
   const AppUpdatePrompt._();
 
