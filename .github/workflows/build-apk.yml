@@ -2,7 +2,7 @@ name: Munib Code Checks
 
 on:
   push:
-    branches: [main, feat/remote-config-updates]
+    branches: [main]
     paths:
       - "lib/**"
       - "android/**"
