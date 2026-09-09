@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -55,7 +56,11 @@ class PrayerProvider with ChangeNotifier {
   bool silentMode = false;
   String adhanVoice = 'Madinah';
   String currentCity = 'غير محدد';
-  String language = 'العربية';
+  String language = ui.PlatformDispatcher.instance.locale.languageCode
+          .toLowerCase()
+          .startsWith('ar')
+      ? 'العربية'
+      : 'English';
   bool isDarkMode = true;
   bool use24HourFormat = true;
 
@@ -88,7 +93,11 @@ class PrayerProvider with ChangeNotifier {
 
   Future<void> _initialize() async {
     final prefs = await SharedPreferences.getInstance();
+    final hadSavedLanguage = prefs.getString('language') != null;
     _readSettings(prefs);
+    if (!hadSavedLanguage) {
+      await prefs.setString('language', languageCode);
+    }
     _savedLocations = await _savedLocationsStore.load();
 
     if (_savedLocations.isNotEmpty) {
@@ -136,10 +145,16 @@ class PrayerProvider with ChangeNotifier {
         ? savedVoice!
         : 'Madinah';
     currentCity = prefs.getString('currentCity') ?? 'غير محدد';
-    final savedLanguage = prefs.getString('language') ?? 'ar';
-    language = savedLanguage == 'en' || savedLanguage == 'English'
-        ? 'English'
-        : 'العربية';
+    final savedLanguage = prefs.getString('language');
+    if (savedLanguage != null) {
+      language = savedLanguage == 'en' || savedLanguage == 'English'
+          ? 'English'
+          : 'العربية';
+    } else {
+      final deviceLanguage =
+          ui.PlatformDispatcher.instance.locale.languageCode.toLowerCase();
+      language = deviceLanguage.startsWith('ar') ? 'العربية' : 'English';
+    }
     isDarkMode = prefs.getBool('isDarkMode') ?? true;
     use24HourFormat = prefs.getBool('use24HourFormat') ?? true;
 

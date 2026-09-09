@@ -127,10 +127,9 @@ class _ImsakiahAppState extends State<ImsakiahApp> {
 
   Future<void> _openPushDestination(PushDestination destination) async {
     final prefs = await SharedPreferences.getInstance();
-    final languageSelected = prefs.getString('language') != null;
     final onboardingDone = !(prefs.getBool('isFirstRun') ?? true);
 
-    if (!languageSelected || !onboardingDone) {
+    if (!onboardingDone) {
       PushNotificationService.deferDestination(destination);
       return;
     }

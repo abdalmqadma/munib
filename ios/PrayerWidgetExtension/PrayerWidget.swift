@@ -20,6 +20,7 @@ private struct PrayerWidgetEntry: TimelineEntry {
     let languageCode: String
     let locationName: String
     let use24HourFormat: Bool
+    let themePreference: String
 
     var isArabic: Bool {
         languageCode.lowercased().hasPrefix("ar")
@@ -38,7 +39,8 @@ private struct PrayerWidgetProvider: TimelineProvider {
             upcomingPrayers: [],
             languageCode: "ar",
             locationName: "غزة",
-            use24HourFormat: true
+            use24HourFormat: true,
+            themePreference: "system"
         )
     }
 
@@ -99,7 +101,8 @@ private struct PrayerWidgetProvider: TimelineProvider {
             upcomingPrayers: Array(future.prefix(5)),
             languageCode: defaults.string(forKey: "widget_language") ?? "ar",
             locationName: defaults.string(forKey: "widget_location")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
-            use24HourFormat: defaults.object(forKey: "widget_use_24h") as? Bool ?? true
+            use24HourFormat: defaults.object(forKey: "widget_use_24h") as? Bool ?? true,
+            themePreference: defaults.string(forKey: "widget_theme_preference") ?? "system"
         )
     }
 
@@ -142,10 +145,48 @@ private struct PrayerWidgetProvider: TimelineProvider {
 
 private struct PrayerWidgetView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.colorScheme) private var systemColorScheme
     let entry: PrayerWidgetEntry
 
     private let gold = Color(red: 244 / 255, green: 199 / 255, blue: 106 / 255)
-    private let mutedWhite = Color.white.opacity(0.76)
+
+    private var usesDarkPalette: Bool {
+        switch entry.themePreference.lowercased() {
+        case "dark": return true
+        case "light": return false
+        default: return systemColorScheme == .dark
+        }
+    }
+
+    private var primaryText: Color {
+        usesDarkPalette ? .white : Color(red: 24 / 255, green: 31 / 255, blue: 28 / 255)
+    }
+
+    private var secondaryText: Color {
+        usesDarkPalette ? Color.white.opacity(0.76) : Color(red: 92 / 255, green: 101 / 255, blue: 97 / 255)
+    }
+
+    private var bodyText: Color {
+        usesDarkPalette ? Color.white.opacity(0.9) : Color(red: 45 / 255, green: 54 / 255, blue: 50 / 255)
+    }
+
+    private var panelColor: Color {
+        usesDarkPalette ? Color.white.opacity(0.08) : Color(red: 22 / 255, green: 53 / 255, blue: 46 / 255).opacity(0.06)
+    }
+
+    private var listPanelColor: Color {
+        usesDarkPalette ? Color.black.opacity(0.12) : Color(red: 22 / 255, green: 53 / 255, blue: 46 / 255).opacity(0.05)
+    }
+
+    private var dividerColor: Color {
+        usesDarkPalette ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var iconBackground: Color {
+        usesDarkPalette
+            ? Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255)
+            : Color(red: 22 / 255, green: 53 / 255, blue: 46 / 255).opacity(0.08)
+    }
 
     var body: some View {
         Group {
@@ -163,7 +204,7 @@ private struct PrayerWidgetView: View {
                     }
                 }
                 .padding(family == .systemSmall ? 12 : 14)
-                .munibWidgetBackground()
+                .munibWidgetBackground(isDark: usesDarkPalette)
             }
         }
         .environment(\.layoutDirection, entry.isArabic ? .rightToLeft : .leftToRight)
@@ -211,7 +252,7 @@ private struct PrayerWidgetView: View {
                 prayerIcon
                 Text(entry.isArabic ? "الصلاة التالية" : "Next prayer")
                     .font(.caption2.weight(.medium))
-                    .foregroundStyle(mutedWhite)
+                    .foregroundStyle(secondaryText)
                     .lineLimit(1)
             }
 
@@ -224,7 +265,7 @@ private struct PrayerWidgetView: View {
 
                 countdown(to: next.date)
                     .font(.title2.weight(.bold).monospacedDigit())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(primaryText)
                     .environment(\.layoutDirection, .leftToRight)
 
                 Text(entry.isArabic ? "متبقي" : "remaining")
@@ -239,7 +280,7 @@ private struct PrayerWidgetView: View {
             if !entry.locationName.isEmpty {
                 Label(entry.locationName, systemImage: "location.fill")
                     .font(.caption2)
-                    .foregroundStyle(mutedWhite)
+                    .foregroundStyle(secondaryText)
                     .lineLimit(1)
             }
         }
@@ -253,7 +294,7 @@ private struct PrayerWidgetView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.isArabic ? "الصلاة التالية" : "Next prayer")
                             .font(.caption2)
-                            .foregroundStyle(mutedWhite)
+                            .foregroundStyle(secondaryText)
 
                         if let next = entry.nextPrayer {
                             Text(localizedPrayerName(next.name))
@@ -268,7 +309,7 @@ private struct PrayerWidgetView: View {
 
                 Text(dhikr(for: entry.date))
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(bodyText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.8)
             }
@@ -278,7 +319,7 @@ private struct PrayerWidgetView: View {
                 if let next = entry.nextPrayer {
                     countdown(to: next.date)
                         .font(.title2.weight(.bold).monospacedDigit())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(primaryText)
                         .environment(\.layoutDirection, .leftToRight)
 
                     Text(entry.isArabic ? "متبقي" : "remaining")
@@ -291,18 +332,18 @@ private struct PrayerWidgetView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
             .padding(.horizontal, 8)
-            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(panelColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(formattedDate(entry.date))
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(primaryText)
                     .lineLimit(2)
 
                 if !entry.locationName.isEmpty {
                     Label(entry.locationName, systemImage: "location.fill")
                         .font(.caption2)
-                        .foregroundStyle(mutedWhite)
+                        .foregroundStyle(secondaryText)
                         .lineLimit(2)
                 }
             }
@@ -318,12 +359,12 @@ private struct PrayerWidgetView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(formattedDate(entry.date))
                         .font(.headline.weight(.bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(primaryText)
 
                     if !entry.locationName.isEmpty {
                         Label(entry.locationName, systemImage: "location.fill")
                             .font(.caption)
-                            .foregroundStyle(mutedWhite)
+                            .foregroundStyle(secondaryText)
                             .lineLimit(1)
                     }
                 }
@@ -339,7 +380,7 @@ private struct PrayerWidgetView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(entry.isArabic ? "الصلاة التالية" : "Next prayer")
                         .font(.caption)
-                        .foregroundStyle(mutedWhite)
+                        .foregroundStyle(secondaryText)
 
                     HStack(alignment: .firstTextBaseline) {
                         Text(localizedPrayerName(next.name))
@@ -350,12 +391,12 @@ private struct PrayerWidgetView: View {
 
                         countdown(to: next.date)
                             .font(.title2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(primaryText)
                             .environment(\.layoutDirection, .leftToRight)
                     }
                 }
                 .padding(14)
-                .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(panelColor, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             } else {
                 emptyState
                     .padding(.vertical, 16)
@@ -363,13 +404,13 @@ private struct PrayerWidgetView: View {
 
             Text(entry.isArabic ? "المواقيت القادمة" : "Upcoming prayers")
                 .font(.subheadline.weight(.bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryText)
 
             VStack(spacing: 0) {
                 if entry.upcomingPrayers.isEmpty {
                     Text(entry.isArabic ? "افتح منيب لتحميل المواقيت" : "Open Munib to load prayer times")
                         .font(.caption)
-                        .foregroundStyle(mutedWhite)
+                        .foregroundStyle(secondaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 12)
                 } else {
@@ -377,19 +418,19 @@ private struct PrayerWidgetView: View {
                         prayerRow(prayer)
 
                         if index < min(entry.upcomingPrayers.count, 5) - 1 {
-                            Divider().overlay(Color.white.opacity(0.12))
+                            Divider().overlay(dividerColor)
                         }
                     }
                 }
             }
             .padding(.horizontal, 12)
-            .background(Color.black.opacity(0.12), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(listPanelColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             Spacer(minLength: 0)
 
             Text(dhikr(for: entry.date))
                 .font(.caption)
-                .foregroundStyle(Color.white.opacity(0.88))
+                .foregroundStyle(bodyText)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .multilineTextAlignment(.center)
@@ -401,7 +442,7 @@ private struct PrayerWidgetView: View {
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(gold)
             .frame(width: 34, height: 34)
-            .background(Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255), in: Circle())
+            .background(iconBackground, in: Circle())
             .overlay(Circle().stroke(gold.opacity(0.65), lineWidth: 1))
     }
 
@@ -425,7 +466,7 @@ private struct PrayerWidgetView: View {
         HStack(spacing: 10) {
             Text(localizedPrayerName(prayer.name))
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryText)
                 .lineLimit(1)
 
             Spacer()
@@ -441,7 +482,7 @@ private struct PrayerWidgetView: View {
     private var emptyState: some View {
         Text(entry.isArabic ? "افتح التطبيق مرة واحدة لتحميل المواقيت" : "Open Munib once to load prayer times")
             .font(.caption)
-            .foregroundStyle(mutedWhite)
+            .foregroundStyle(secondaryText)
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
     }
@@ -524,12 +565,19 @@ private struct PrayerWidgetView: View {
 }
 
 private struct PrayerWidgetBackground: View {
+    let isDark: Bool
+
     var body: some View {
         LinearGradient(
-            colors: [
-                Color(red: 9 / 255, green: 25 / 255, blue: 47 / 255),
-                Color(red: 15 / 255, green: 44 / 255, blue: 76 / 255),
-            ],
+            colors: isDark
+                ? [
+                    Color(red: 7 / 255, green: 20 / 255, blue: 31 / 255),
+                    Color(red: 11 / 255, green: 31 / 255, blue: 58 / 255),
+                ]
+                : [
+                    Color(red: 253 / 255, green: 251 / 255, blue: 247 / 255),
+                    Color(red: 247 / 255, green: 244 / 255, blue: 238 / 255),
+                ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -538,13 +586,13 @@ private struct PrayerWidgetBackground: View {
 
 private extension View {
     @ViewBuilder
-    func munibWidgetBackground() -> some View {
+    func munibWidgetBackground(isDark: Bool) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
             containerBackground(for: .widget) {
-                PrayerWidgetBackground()
+                PrayerWidgetBackground(isDark: isDark)
             }
         } else {
-            background(PrayerWidgetBackground())
+            background(PrayerWidgetBackground(isDark: isDark))
         }
     }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../prayer_times/data/widget_service.dart';
+
 enum MunibThemePreference { system, light, dark }
 
 class ThemeProvider with ChangeNotifier {
@@ -31,6 +33,7 @@ class ThemeProvider with ChangeNotifier {
       (e) => e.name == saved,
       orElse: () => MunibThemePreference.system,
     );
+    await WidgetService.saveThemePreference(_preference.name);
     notifyListeners();
   }
 
@@ -38,6 +41,7 @@ class ThemeProvider with ChangeNotifier {
     _preference = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, value.name);
+    await WidgetService.saveThemePreference(value.name);
     notifyListeners();
   }
 }

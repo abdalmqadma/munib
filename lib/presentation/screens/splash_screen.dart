@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/push_notification_service.dart';
 import 'home_screen.dart';
-import 'language_selection_screen.dart';
 import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -31,7 +30,7 @@ class _SplashScreenState extends State<SplashScreen>
       parent: _controller,
       curve: const Interval(0, .82, curve: Curves.easeOut),
     );
-    _scaleAnimation = Tween<double>(begin: .9, end: 1).animate(
+    _scaleAnimation = Tween<double>(begin: .92, end: 1).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
     _controller.forward();
@@ -45,25 +44,19 @@ class _SplashScreenState extends State<SplashScreen>
     try {
       await AuthService().signOutUnverifiedPasswordUser();
     } catch (_) {
-      // Authentication cleanup is best-effort. Never trap the user on splash
-      // because Firebase or the network is temporarily unavailable.
+      // Authentication cleanup is best-effort. Never trap the user on splash.
     }
 
     final prefs = await SharedPreferences.getInstance();
     final isFirstRun = prefs.getBool('isFirstRun') ?? true;
-    final lang = prefs.getString('language');
 
     final Widget nextScreen;
     final String nextRouteName;
-    if (lang == null) {
-      nextScreen = const LanguageSelectionScreen();
-      nextRouteName = '/language';
-    } else if (isFirstRun) {
+    if (isFirstRun) {
       nextScreen = const OnboardingScreen();
       nextRouteName = '/onboarding';
     } else {
-      final pushDestination =
-          PushNotificationService.takeDeferredDestination();
+      final pushDestination = PushNotificationService.takeDeferredDestination();
       nextScreen = HomeScreen(
         initialIndex: pushDestination?.homeIndex ?? 0,
         initialAzkarCategory:
@@ -72,14 +65,13 @@ class _SplashScreenState extends State<SplashScreen>
       nextRouteName = '/home';
     }
 
-    if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          settings: RouteSettings(name: nextRouteName),
-          builder: (_) => nextScreen,
-        ),
-      );
-    }
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        settings: RouteSettings(name: nextRouteName),
+        builder: (_) => nextScreen,
+      ),
+    );
   }
 
   @override
@@ -91,8 +83,8 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final dark = theme.brightness == Brightness.dark;
-    final markColor = dark ? Colors.white : Colors.black;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -103,12 +95,31 @@ class _SplashScreenState extends State<SplashScreen>
             scale: _scaleAnimation,
             child: Semantics(
               image: true,
-              label: 'Munib',
-              child: SizedBox.square(
-                dimension: 132,
-                child: CustomPaint(
-                  painter: _MunibVectorPainter(color: markColor),
-                ),
+              label: isArabic ? 'منيب' : 'Munib',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png',
+                    width: 132,
+                    height: 132,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isArabic ? 'منيب' : 'Munib',
+                    textDirection:
+                        isArabic ? TextDirection.rtl : TextDirection.ltr,
+                    style: theme.textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: isArabic ? 0 : .3,
+                      color: dark
+                          ? theme.colorScheme.onSurface
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -116,86 +127,4 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
-}
-
-class _MunibVectorPainter extends CustomPainter {
-  final Color color;
-
-  const _MunibVectorPainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill
-      ..isAntiAlias = true;
-
-    final center = Offset(size.width * .49, size.height * .49);
-    final outerRadius = size.shortestSide * .35;
-    final crescent = Path()
-      ..addOval(Rect.fromCircle(center: center, radius: outerRadius));
-    final cutout = Path()
-      ..addOval(
-        Rect.fromCircle(
-          center: Offset(size.width * .59, size.height * .41),
-          radius: outerRadius * .82,
-        ),
-      );
-    final crescentPath =
-        Path.combine(PathOperation.difference, crescent, cutout);
-    canvas.drawPath(crescentPath, paint);
-
-    final starCenter = Offset(size.width * .72, size.height * .28);
-    final star = Path();
-    const points = 8;
-    for (var i = 0; i < points; i++) {
-      final angle = i * 3.141592653589793 / 4;
-      final radius = i.isEven ? size.width * .065 : size.width * .025;
-      final point = Offset(
-        starCenter.dx + radius * _cos(angle),
-        starCenter.dy + radius * _sin(angle),
-      );
-      if (i == 0) {
-        star.moveTo(point.dx, point.dy);
-      } else {
-        star.lineTo(point.dx, point.dy);
-      }
-    }
-    star.close();
-    canvas.drawPath(star, paint);
-  }
-
-  double _sin(double x) {
-    // The painter only uses multiples of 45 degrees; this avoids another
-    // dependency while keeping the mark deterministic.
-    const values = [
-      0.0,
-      .70710678,
-      1.0,
-      .70710678,
-      0.0,
-      -.70710678,
-      -1.0,
-      -.70710678,
-    ];
-    return values[((x / (3.141592653589793 / 4)).round()) % 8];
-  }
-
-  double _cos(double x) {
-    const values = [
-      1.0,
-      .70710678,
-      0.0,
-      -.70710678,
-      -1.0,
-      -.70710678,
-      0.0,
-      .70710678,
-    ];
-    return values[((x / (3.141592653589793 / 4)).round()) % 8];
-  }
-
-  @override
-  bool shouldRepaint(covariant _MunibVectorPainter oldDelegate) =>
-      oldDelegate.color != color;
 }

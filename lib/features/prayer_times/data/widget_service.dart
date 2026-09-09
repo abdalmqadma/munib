@@ -78,6 +78,24 @@ class WidgetService {
     }
   }
 
+  static Future<void> saveThemePreference(String preference) async {
+    try {
+      await _preparePlatform();
+      final normalized = switch (preference) {
+        'light' => 'light',
+        'dark' => 'dark',
+        _ => 'system',
+      };
+      await HomeWidget.saveWidgetData<String>(
+        'widget_theme_preference',
+        normalized,
+      );
+      await _refreshAll();
+    } catch (e) {
+      debugPrint('Error saving widget theme preference: $e');
+    }
+  }
+
   static Future<void> saveLocation(String locationName) async {
     try {
       await _preparePlatform();

@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.SystemClock
 import android.view.View
@@ -102,6 +104,11 @@ object PrayerWidgetScheduler {
             TimeZone.getDefault()
         }
         val locationName = prefs.getString("widget_location", "")?.trim().orEmpty()
+        val darkWidget = useDarkWidgetPalette(context, prefs.getString("widget_theme_preference", "system"))
+        val primaryText = if (darkWidget) Color.WHITE else Color.rgb(24, 31, 28)
+        val secondaryText = if (darkWidget) Color.argb(191, 255, 255, 255) else Color.rgb(92, 101, 97)
+        val bodyText = if (darkWidget) Color.argb(230, 255, 255, 255) else Color.rgb(45, 54, 50)
+        val accentText = if (darkWidget) Color.rgb(244, 199, 106) else Color.rgb(166, 116, 38)
         val localizedName = localizePrayer(next.name, isArabic)
         val locale = if (isArabic) Locale("ar") else Locale.ENGLISH
         val dateFormat = SimpleDateFormat("EEE d MMMM", locale).apply {
@@ -157,7 +164,43 @@ object PrayerWidgetScheduler {
                 )
             }
             views.setImageViewResource(R.id.widget_bg_icon, iconRes)
-            views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
+            views.setInt(
+                R.id.widget_root,
+                "setBackgroundResource",
+                if (darkWidget) R.drawable.widget_glass_background else R.drawable.widget_light_background,
+            )
+            views.setInt(
+                R.id.widget_icon_container,
+                "setBackgroundResource",
+                if (darkWidget) R.drawable.widget_prayer_icon_circle else R.drawable.widget_prayer_icon_circle_light,
+            )
+            when (layoutRes) {
+                R.layout.widget_small -> views.setInt(
+                    R.id.widget_small_hero,
+                    "setBackgroundResource",
+                    if (darkWidget) R.drawable.widget_glass_panel else R.drawable.widget_light_panel,
+                )
+                R.layout.widget_medium -> views.setInt(
+                    R.id.widget_medium_hero,
+                    "setBackgroundResource",
+                    if (darkWidget) R.drawable.widget_glass_panel else R.drawable.widget_light_panel,
+                )
+                R.layout.widget_large -> views.setInt(
+                    R.id.widget_large_hero,
+                    "setBackgroundResource",
+                    if (darkWidget) R.drawable.widget_glass_panel else R.drawable.widget_light_panel,
+                )
+            }
+            views.setTextColor(R.id.widget_next_label, secondaryText)
+            views.setTextColor(R.id.widget_next_prayer, accentText)
+            views.setTextColor(R.id.widget_time_left, primaryText)
+            views.setTextColor(R.id.widget_remaining_label, accentText)
+            views.setTextColor(R.id.widget_dhikr, bodyText)
+            views.setTextColor(R.id.widget_date, secondaryText)
+            views.setTextColor(R.id.widget_current_time, primaryText)
+            if (layoutRes == R.layout.widget_large) {
+                views.setTextColor(R.id.widget_location, accentText)
+            }
             views.setOnClickPendingIntent(R.id.widget_root, openApp)
 
             val remaining = (next.atMillis - now).coerceAtLeast(0L)
@@ -226,16 +269,37 @@ object PrayerWidgetScheduler {
             Pair(PrayerWidgetLarge::class.java, R.layout.widget_large),
         )
         val openApp = launchPendingIntent(context)
+        val darkWidget = useDarkWidgetPalette(
+            context,
+            prefs.getString("widget_theme_preference", "system"),
+        )
+        val emptyText = if (darkWidget) Color.argb(230, 255, 255, 255) else Color.rgb(45, 54, 50)
         for ((provider, layout) in providers) {
             val ids = manager.getAppWidgetIds(ComponentName(context, provider))
             for (id in ids) {
                 val views = RemoteViews(context.packageName, layout)
-                views.setInt(R.id.widget_root, "setBackgroundResource", R.drawable.widget_glass_background)
+                views.setInt(
+                    R.id.widget_root,
+                    "setBackgroundResource",
+                    if (darkWidget) R.drawable.widget_glass_background else R.drawable.widget_light_background,
+                )
                 views.setViewVisibility(R.id.widget_active_layout, View.GONE)
                 views.setViewVisibility(R.id.widget_empty_layout, View.VISIBLE)
                 views.setTextViewText(R.id.widget_empty_message, message)
+                views.setTextColor(R.id.widget_empty_message, emptyText)
                 views.setOnClickPendingIntent(R.id.widget_root, openApp)
                 manager.updateAppWidget(id, views)
+            }
+        }
+    }
+
+    private fun useDarkWidgetPalette(context: Context, rawPreference: String?): Boolean {
+        return when (rawPreference?.lowercase()) {
+            "dark" -> true
+            "light" -> false
+            else -> {
+                val mode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                mode == Configuration.UI_MODE_NIGHT_YES
             }
         }
     }
