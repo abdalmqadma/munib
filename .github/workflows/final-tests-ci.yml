@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   checks:
@@ -28,15 +28,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
-      - name: Set up Java 17
+      - name: Set up Java 21 for Firebase Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Firebase test dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Test web Auth handlers and Firestore rules
+        run: npm run test:firebase
+
+      - name: Set up Java 17 for Android
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -52,26 +63,6 @@ jobs:
         with:
           channel: stable
           cache: true
-
-      - name: Install Firebase test dependencies
-        run: npm install --ignore-scripts
-
-      - name: Commit package lock when generated
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package-lock.json
-          git diff --cached --check
-          if git diff --cached --quiet; then
-            echo "package-lock.json is already current."
-          else
-            git commit -m "test: lock Firebase emulator dependencies"
-            git push origin HEAD:feat/final-tests
-          fi
-
-      - name: Test web Auth handlers and Firestore rules
-        run: npm run test:firebase
 
       - name: Get Flutter dependencies
         run: flutter pub get
