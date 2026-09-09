@@ -26,21 +26,22 @@ jobs:
           from pathlib import Path
           p = Path('android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt')
           s = p.read_text()
-          old = '''                setColor(
-                    if (dark) Color.argb(191, 145, 35, 45)
-                    else Color.argb(191, 180, 45, 55),
-                )
-                setStroke(dp(2), Color.rgb(214, 218, 224))'''
-          new = '''                setColor(Color.argb(217, 128, 128, 128))
-                setStroke(dp(2), Color.rgb(70, 70, 70))'''
-          if old not in s:
-              raise SystemExit('Delete target style marker not found')
-          p.write_text(s.replace(old, new, 1))
+          markers = [
+              'Color.argb(191, 145, 35, 45)',
+              'Color.argb(191, 180, 45, 55)',
+              'Color.rgb(214, 218, 224)',
+          ]
+          if not all(m in s for m in markers):
+              raise SystemExit('Delete target color markers not found')
+          s = s.replace('Color.argb(191, 145, 35, 45)', 'Color.argb(217, 128, 128, 128)', 1)
+          s = s.replace('Color.argb(191, 180, 45, 55)', 'Color.argb(217, 128, 128, 128)', 1)
+          s = s.replace('Color.rgb(214, 218, 224)', 'Color.rgb(70, 70, 70)', 1)
+          p.write_text(s)
           PY
 
       - name: Validate exact style
         run: |
-          grep -q "Color.argb(217, 128, 128, 128)" android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
+          test "$(grep -c 'Color.argb(217, 128, 128, 128)' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt)" -ge 2
           grep -q "Color.rgb(70, 70, 70)" android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
 
       - name: Set up Java 17
