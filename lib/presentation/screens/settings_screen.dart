@@ -9,6 +9,7 @@ import '../providers/prayer_provider.dart';
 import '../providers/theme_provider.dart';
 import 'imsakia_settings_screen.dart';
 import 'location_imsakia_screen.dart';
+import 'legal_document_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -101,6 +102,44 @@ class SettingsScreen extends StatelessWidget {
                           onTap: () => _showThemeDialog(
                             context,
                             themeProvider,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          title: t('شروط الاستخدام', 'Terms of Use'),
+                          subtitle: t(
+                            'اقرأ شروط استخدام مُنِيب',
+                            'Read the terms for using Munib',
+                          ),
+                          icon: Icons.description_outlined,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LegalDocumentScreen(
+                                type: LegalDocumentType.terms,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 20, endIndent: 20),
+                        _SettingsTile(
+                          title: t('سياسة الخصوصية', 'Privacy Policy'),
+                          subtitle: t(
+                            'كيف يتعامل مُنِيب مع بياناتك',
+                            'How Munib handles your data',
+                          ),
+                          icon: Icons.privacy_tip_outlined,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LegalDocumentScreen(
+                                type: LegalDocumentType.privacy,
+                              ),
+                            ),
                           ),
                         ),
                       ],

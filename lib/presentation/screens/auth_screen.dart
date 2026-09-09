@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_strings.dart';
+import '../../core/legal_consent.dart';
 import '../../data/services/auth_service.dart';
 import 'email_verification_screen.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
+import 'legal_document_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool returnOnSuccess;
@@ -31,6 +33,7 @@ class _AuthScreenState extends State<AuthScreen> {
   String verificationEmail = '';
   String verificationUid = '';
   bool verificationInitialMessageJustSent = false;
+  bool acceptedLegal = false;
 
   @override
   void dispose() {
@@ -55,6 +58,14 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     if (isLoading || !_formKey.currentState!.validate()) return;
+    if (!canSubmitAuthAction(isLogin: isLogin, acceptedLegal: acceptedLegal)) {
+      _showMessage(
+        Localizations.localeOf(context).languageCode == 'ar'
+            ? 'يجب الموافقة على شروط الاستخدام وسياسة الخصوصية قبل إنشاء الحساب.'
+            : 'You must accept the Terms of Use and Privacy Policy before creating an account.',
+      );
+      return;
+    }
     setState(() => isLoading = true);
 
     try {
@@ -67,6 +78,7 @@ class _AuthScreenState extends State<AuthScreen> {
               email,
               password,
               _nameController.text.trim(),
+              acceptedLegal: acceptedLegal,
             );
 
       if (!mounted || user == null) return;
@@ -158,7 +170,9 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => isLoading = true);
 
     try {
-      final user = await _auth.signInWithGoogle();
+      final user = await _auth.signInWithGoogle(
+        acceptedLegalForNewAccount: acceptedLegal,
+      );
       if (!mounted) return;
       if (user == null) {
         _showMessage(context.tr('googleCancelled'));
@@ -200,6 +214,10 @@ class _AuthScreenState extends State<AuthScreen> {
         return context.tr('invalidCredentials');
       case 'too-many-requests':
         return context.tr('tooManyRequests');
+      case 'terms-consent-required':
+        return Localizations.localeOf(context).languageCode == 'ar'
+            ? 'لإنشاء حساب جديد، انتقل إلى إنشاء حساب ووافق على شروط الاستخدام وسياسة الخصوصية.'
+            : 'To create a new account, switch to Create account and accept the Terms of Use and Privacy Policy.';
       default:
         return context.tr('authUnexpected');
     }
@@ -218,6 +236,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _formKey.currentState?.reset();
       _passwordController.clear();
       _confirmController.clear();
+      acceptedLegal = false;
     });
   }
 
@@ -401,11 +420,89 @@ class _AuthScreenState extends State<AuthScreen> {
                             : null,
                       ),
                     ],
+                    if (!isLogin) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: acceptedLegal,
+                            onChanged: isLoading
+                                ? null
+                                : (value) => setState(
+                                      () => acceptedLegal = value ?? false,
+                                    ),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    Localizations.localeOf(context).languageCode == 'ar'
+                                        ? 'أوافق على '
+                                        : 'I agree to the ',
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalDocumentScreen(
+                                          type: LegalDocumentType.terms,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      Localizations.localeOf(context).languageCode == 'ar'
+                                          ? 'شروط الاستخدام'
+                                          : 'Terms of Use',
+                                    ),
+                                  ),
+                                  Text(
+                                    Localizations.localeOf(context).languageCode == 'ar'
+                                        ? ' و'
+                                        : ' and the ',
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalDocumentScreen(
+                                          type: LegalDocumentType.privacy,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      Localizations.localeOf(context).languageCode == 'ar'
+                                          ? 'سياسة الخصوصية'
+                                          : 'Privacy Policy',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: isLoading ? null : _submit,
+                        onPressed: isLoading || (!isLogin && !acceptedLegal)
+                            ? null
+                            : _submit,
                         child: isLoading
                             ? const SizedBox(
                                 width: 22,
@@ -423,7 +520,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: isLoading ? null : _signInWithGoogle,
+                        onPressed: isLoading || (!isLogin && !acceptedLegal)
+                            ? null
+                            : _signInWithGoogle,
                         icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
                         label: Text(context.tr('googleLogin')),
                       ),
