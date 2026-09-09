@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:imsakia/core/auth_email_localization.dart';
+import 'package:munib/core/auth_email_localization.dart';
 
 void main() {
   group('normalizeAuthEmailLanguage', () {
