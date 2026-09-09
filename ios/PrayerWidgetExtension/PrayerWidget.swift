@@ -149,19 +149,60 @@ private struct PrayerWidgetView: View {
 
     var body: some View {
         Group {
-            switch family {
-            case .systemSmall:
-                smallView
-            case .systemLarge:
-                largeView
-            default:
-                mediumView
+            if family == .accessoryRectangular {
+                lockScreenView
+            } else {
+                Group {
+                    switch family {
+                    case .systemSmall:
+                        smallView
+                    case .systemLarge:
+                        largeView
+                    default:
+                        mediumView
+                    }
+                }
+                .padding(family == .systemSmall ? 12 : 14)
+                .munibWidgetBackground()
             }
         }
-        .padding(family == .systemSmall ? 12 : 14)
-        .munibWidgetBackground()
         .environment(\.layoutDirection, entry.isArabic ? .rightToLeft : .leftToRight)
         .widgetURL(URL(string: "munib://home"))
+    }
+
+    private var lockScreenView: some View {
+        VStack(
+            alignment: entry.isArabic ? .trailing : .leading,
+            spacing: 3
+        ) {
+            if let next = entry.nextPrayer {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(localizedPrayerName(next.name))
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 4)
+
+                    countdown(to: next.date)
+                        .font(.headline.weight(.semibold).monospacedDigit())
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+                .foregroundStyle(.primary)
+
+                Text(shortDhikr(for: entry.date))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity, alignment: entry.isArabic ? .trailing : .leading)
+            } else {
+                Text(entry.isArabic ? "افتح منيب لتحميل المواقيت" : "Open Munib to load prayer times")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+            }
+        }
     }
 
     private var smallView: some View {
@@ -433,6 +474,27 @@ private struct PrayerWidgetView: View {
         return formatter.string(from: date)
     }
 
+    private func shortDhikr(for date: Date) -> String {
+        let arabic = [
+            "سبحان الله",
+            "الحمد لله",
+            "الله أكبر",
+            "أستغفر الله",
+            "حسبي الله",
+        ]
+        let english = [
+            "Glory to Allah",
+            "Praise be to Allah",
+            "Allah is Greatest",
+            "I seek forgiveness",
+            "Allah is sufficient",
+        ]
+
+        let list = entry.isArabic ? arabic : english
+        let minute = Int(date.timeIntervalSince1970 / 60)
+        return list[abs(minute) % list.count]
+    }
+
     private func dhikr(for date: Date) -> String {
         let arabic = [
             "سبحان الله وبحمده",
@@ -495,6 +557,6 @@ struct PrayerWidget: Widget {
         }
         .configurationDisplayName("Munib Prayer")
         .description("Prayer times, the next prayer and a live countdown from Munib.")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryRectangular])
     }
 }
