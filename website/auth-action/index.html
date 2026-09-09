@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0d151d" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>مُنِيب | معالجة رابط الحساب</title>
+  <link rel="stylesheet" href="/assets/site.css" />
+</head>
+<body>
+<main class="shell"><div class="card form-card">
+  <a class="brand" href="/">مُنِيب</a>
+  <p class="sub" id="message">جارٍ فتح رابط الحساب…</p>
+  <div class="msg hidden" id="error"></div>
+</div></main>
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('mode');
+  const query = params.toString();
+  const suffix = query ? `?${query}` : '';
+
+  if (mode === 'verifyEmail') {
+    location.replace(`/verify-email${suffix}`);
+    return;
+  }
+  if (mode === 'resetPassword') {
+    location.replace(`/reset-password${suffix}`);
+    return;
+  }
+
+  const lang = (params.get('lang') || navigator.language || 'ar').toLowerCase();
+  const english = lang.startsWith('en');
+  if (english) {
+    document.documentElement.lang = 'en';
+    document.documentElement.dir = 'ltr';
+    document.title = 'Munib | Account link';
+    document.getElementById('message').textContent = 'This account link is not supported.';
+  } else {
+    document.getElementById('message').textContent = 'رابط الحساب هذا غير مدعوم.';
+  }
+  const error = document.getElementById('error');
+  error.textContent = english
+      ? 'Open Munib and request a new link from the relevant account screen.'
+      : 'افتح مُنِيب واطلب رابطًا جديدًا من شاشة الحساب المناسبة.';
+  error.className = 'msg error';
+})();
+</script>
+</body>
+</html>
