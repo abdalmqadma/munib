@@ -6,6 +6,7 @@ on:
       - feat/terms-privacy
     paths:
       - ".github/workflows/terms-privacy-ci.yml"
+      - "tool/wire_terms_privacy.py"
   workflow_dispatch:
 
 permissions:
