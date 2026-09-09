@@ -34,6 +34,12 @@ class AuthService {
   static bool isValidEmail(String value) =>
       _emailPattern.hasMatch(normalizeEmail(value));
 
+  static bool shouldRejectNewGoogleAccount({
+    required bool isNewUser,
+    required bool acceptedLegal,
+  }) =>
+      isNewUser && !acceptedLegal;
+
   Stream<User?> get user => _auth.authStateChanges();
 
   Future<User?> registerWithEmail(
@@ -158,7 +164,10 @@ class AuthService {
     if (user == null) return null;
 
     final isNewAccount = result.additionalUserInfo?.isNewUser == true;
-    if (isNewAccount && !acceptedLegalForNewAccount) {
+    if (shouldRejectNewGoogleAccount(
+      isNewUser: isNewAccount,
+      acceptedLegal: acceptedLegalForNewAccount,
+    )) {
       try {
         await user.delete().timeout(const Duration(seconds: 20));
       } finally {
