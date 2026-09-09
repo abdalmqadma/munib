@@ -34,7 +34,16 @@ class AuthService {
 
   Stream<User?> get user => _auth.authStateChanges();
 
-  Future<User?> registerWithEmail(String email, String password, String name) async {
+  Future<User?> registerWithEmail(
+    String email,
+    String password,
+    String name, {
+    required bool acceptedLegal,
+  }) async {
+    if (!acceptedLegal) {
+      throw FirebaseAuthException(code: 'terms-consent-required');
+    }
+
     final normalizedName = normalizeDisplayName(name);
     if (!isValidDisplayName(normalizedName)) {
       throw const FormatException('invalid-display-name');
@@ -119,7 +128,7 @@ class AuthService {
     return false;
   }
 
-  Future<User?> signInWithGoogle() async {
+  Future<User?> signInWithGoogle({required bool acceptedLegalForNewAccount}) async {
     final googleUser = await _googleSignIn.signIn();
     if (googleUser == null) return null;
 
@@ -133,9 +142,22 @@ class AuthService {
         .signInWithCredential(credential)
         .timeout(const Duration(seconds: 30));
     final user = result.user;
-    if (user != null) {
-      unawaited(_syncUserProfile(user));
+    if (user == null) return null;
+
+    final isNewAccount = result.additionalUserInfo?.isNewUser == true;
+    if (isNewAccount && !acceptedLegalForNewAccount) {
+      try {
+        await user.delete().timeout(const Duration(seconds: 20));
+      } finally {
+        try {
+          await _googleSignIn.signOut();
+        } catch (_) {}
+        await _auth.signOut();
+      }
+      throw FirebaseAuthException(code: 'terms-consent-required');
     }
+
+    unawaited(_syncUserProfile(user));
     return user;
   }
 
