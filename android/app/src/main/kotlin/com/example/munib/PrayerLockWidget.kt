@@ -12,6 +12,11 @@ class PrayerLockWidget : HomeWidgetProvider() {
         appWidgetIds: IntArray,
         widgetData: SharedPreferences,
     ) {
-        PrayerWidgetScheduler.refresh(context)
+        PrayerLockWidgetRenderer.refresh(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        PrayerLockWidgetRenderer.disable(context)
+        super.onDisabled(context)
     }
 }
