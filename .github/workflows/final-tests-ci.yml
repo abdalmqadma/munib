@@ -47,6 +47,9 @@ jobs:
       - name: Test web Auth handlers and Firestore rules
         run: npm run test:firebase
 
+      - name: Remove Node test workspace before Flutter checks
+        run: rm -rf node_modules
+
       - name: Set up Java 17 for Android
         uses: actions/setup-java@v4
         with:
