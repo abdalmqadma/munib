@@ -6,6 +6,8 @@ import tempfile
 
 def replace_once(path: Path, old: str, new: str, label: str) -> None:
     text = path.read_text()
+    if new in text and old not in text:
+        return
     count = text.count(old)
     if count != 1:
         raise SystemExit(f'{label}: expected one anchor, found {count}')
