@@ -3,96 +3,36 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#C7A24C" />
-  <title>تفعيل البريد الإلكتروني | منيب</title>
-  <style>
-    :root{color-scheme:light dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1720;color:#f5f2e8;padding:20px}
-    main{width:min(100%,460px);background:#17212b;border:1px solid #39424b;border-radius:24px;padding:28px;box-shadow:0 18px 50px #0005}
-    .brand{font-size:30px;font-weight:800;color:#d7b55b;text-align:center;margin-bottom:6px}.sub{text-align:center;color:#b8c0c8;margin:0 0 24px}
-    .msg{margin-top:16px;padding:14px;border-radius:14px;background:#202c37;line-height:1.7}.error{background:#3b2023;color:#ffdadd}.ok{background:#18352b;color:#d9ffed}.hidden{display:none}
-    button,a.button{display:block;width:100%;margin-top:16px;padding:14px 16px;border:0;border-radius:14px;background:#d7b55b;color:#19160d;font-size:16px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none}
-    a.secondary{background:transparent;color:#d7b55b;border:1px solid #6b5a2e}.small{font-size:13px;color:#aeb7c0;line-height:1.7;text-align:center}
-  </style>
+  <meta name="theme-color" content="#0d151d" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>تفعيل البريد الإلكتروني | مُنِيب</title>
+  <link rel="stylesheet" href="/assets/site.css" />
 </head>
 <body>
-<main>
-  <div class="brand">مُنِيب</div>
+<header class="site-header"><div class="shell nav"><a class="brand" href="/">مُنِيب</a><nav class="nav-links"><a href="/terms">شروط الاستخدام</a><a href="/privacy">سياسة الخصوصية</a></nav></div></header>
+<main class="shell"><div class="card form-card">
+  <a class="brand" href="/">مُنِيب</a>
   <p class="sub" id="subtitle">تفعيل البريد الإلكتروني</p>
-
-  <section id="loading">
-    <div class="msg" id="loadingText">جارٍ التحقق من رابط التفعيل…</div>
-  </section>
-
+  <section id="loading"><div class="msg" id="loadingText">جارٍ التحقق من رابط التفعيل…</div></section>
   <section id="success" class="hidden">
-    <div class="msg ok" id="successText">تم تفعيل بريدك الإلكتروني بنجاح. يمكنك الآن العودة إلى منيب.</div>
-    <a class="button" id="openMunib" href="munib://verified">فتح منيب</a>
-    <p class="small" id="openHint">إذا كان منيب مثبتًا على هذا الجهاز، سيفتح التطبيق مباشرة.</p>
+    <div class="msg ok" id="successText">تم تفعيل بريدك الإلكتروني بنجاح. يمكنك الآن العودة إلى مُنِيب.</div>
+    <a class="button" id="openMunib" href="munib://verified">فتح مُنِيب</a>
+    <p class="small center" id="openHint">إذا كان مُنِيب مثبتًا على هذا الجهاز، سيفتح التطبيق مباشرة.</p>
   </section>
-
   <section id="invalid" class="hidden">
     <div class="msg error" id="invalidText">هذا الرابط غير صالح، أو انتهت صلاحيته، أو تم استخدامه من قبل.</div>
-    <p class="small" id="invalidHint">افتح منيب وسجّل الدخول ثم اطلب إعادة إرسال رسالة التفعيل.</p>
-    <a class="button secondary" href="munib://verified" id="backToMunib">فتح منيب</a>
+    <p class="small center" id="invalidHint">افتح مُنِيب وسجّل الدخول ثم اطلب إعادة إرسال رسالة التفعيل.</p>
+    <a class="button secondary" href="munib://verified" id="backToMunib">فتح مُنِيب</a>
   </section>
-</main>
+</div></main>
+<footer class="footer"><div class="shell footer-inner"><span>© 2026 مُنِيب</span><span><a href="/privacy">الخصوصية</a> · <a href="/terms">الشروط</a></span></div></footer>
 <script>
 (() => {
-  const params = new URLSearchParams(location.search);
-  const mode = params.get('mode');
-  const oobCode = params.get('oobCode');
-  const apiKey = params.get('apiKey');
-  const lang = (params.get('lang') || navigator.language || 'ar').toLowerCase();
-  const english = lang.startsWith('en');
-
-  if (english) {
-    document.documentElement.lang = 'en';
-    document.documentElement.dir = 'ltr';
-    document.title = 'Verify email | Munib';
-    document.getElementById('subtitle').textContent = 'Verify your email';
-    document.getElementById('loadingText').textContent = 'Verifying your email link…';
-    document.getElementById('successText').textContent = 'Your email has been verified successfully. You can now return to Munib.';
-    document.getElementById('openMunib').textContent = 'Open Munib';
-    document.getElementById('openHint').textContent = 'If Munib is installed on this device, the app will open directly.';
-    document.getElementById('invalidText').textContent = 'This link is invalid, expired, or has already been used.';
-    document.getElementById('invalidHint').textContent = 'Open Munib, sign in, then request a new verification email.';
-    document.getElementById('backToMunib').textContent = 'Open Munib';
-  }
-
-  const loading = document.getElementById('loading');
-  const success = document.getElementById('success');
-  const invalid = document.getElementById('invalid');
-  const show = el => {
-    loading.classList.add('hidden');
-    success.classList.add('hidden');
-    invalid.classList.add('hidden');
-    el.classList.remove('hidden');
-  };
-
-  async function applyVerification() {
-    if (mode !== 'verifyEmail' || !oobCode || !apiKey) {
-      show(invalid);
-      return;
-    }
-    try {
-      const response = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:update?key=${encodeURIComponent(apiKey)}`,
-        {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({oobCode}),
-        },
-      );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.emailVerified === false) {
-        throw new Error(data?.error?.message || 'VERIFY_FAILED');
-      }
-      show(success);
-    } catch (_) {
-      show(invalid);
-    }
-  }
-
+  const params=new URLSearchParams(location.search),mode=params.get('mode'),oobCode=params.get('oobCode'),apiKey=params.get('apiKey'),lang=(params.get('lang')||navigator.language||'ar').toLowerCase(),english=lang.startsWith('en');
+  if(english){document.documentElement.lang='en';document.documentElement.dir='ltr';document.title='Verify email | Munib';document.getElementById('subtitle').textContent='Verify your email';document.getElementById('loadingText').textContent='Verifying your email link…';document.getElementById('successText').textContent='Your email has been verified successfully. You can now return to Munib.';document.getElementById('openMunib').textContent='Open Munib';document.getElementById('openHint').textContent='If Munib is installed on this device, the app will open directly.';document.getElementById('invalidText').textContent='This link is invalid, expired, or has already been used.';document.getElementById('invalidHint').textContent='Open Munib, sign in, then request a new verification email.';document.getElementById('backToMunib').textContent='Open Munib';}
+  const loading=document.getElementById('loading'),success=document.getElementById('success'),invalid=document.getElementById('invalid');
+  const show=el=>{loading.classList.add('hidden');success.classList.add('hidden');invalid.classList.add('hidden');el.classList.remove('hidden');};
+  async function applyVerification(){if(mode!=='verifyEmail'||!oobCode||!apiKey){show(invalid);return;}try{const response=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:update?key=${encodeURIComponent(apiKey)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oobCode})});const data=await response.json().catch(()=>({}));if(!response.ok||data.emailVerified===false)throw new Error(data?.error?.message||'VERIFY_FAILED');show(success);}catch(_){show(invalid);}}
   applyVerification();
 })();
 </script>
