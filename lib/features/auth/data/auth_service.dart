@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/auth_email_localization.dart';
+
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -39,6 +41,7 @@ class AuthService {
     String password,
     String name, {
     required bool acceptedLegal,
+    required String emailLanguageCode,
   }) async {
     if (!acceptedLegal) {
       throw FirebaseAuthException(code: 'terms-consent-required');
@@ -57,6 +60,11 @@ class AuthService {
     if (user == null) return null;
 
     await user.updateDisplayName(normalizedName);
+
+    // Keep Firebase's localized email template aligned with the language the
+    // user is currently seeing in Munib. Only Arabic and English are supported
+    // by the app today, so unknown locale variants safely fall back to English.
+    await _auth.setLanguageCode(normalizeAuthEmailLanguage(emailLanguageCode));
 
     // This must succeed: an email/password account is not considered ready
     // until Firebase has sent the verification message.
@@ -81,13 +89,17 @@ class AuthService {
     return null;
   }
 
-  Future<void> sendPasswordResetEmail(String email) async {
+  Future<void> sendPasswordResetEmail(
+    String email, {
+    required String languageCode,
+  }) async {
     final normalizedEmail = normalizeEmail(email);
     if (!isValidEmail(normalizedEmail)) {
       throw FirebaseAuthException(code: 'invalid-email');
     }
 
     try {
+      await _auth.setLanguageCode(normalizeAuthEmailLanguage(languageCode));
       await _auth
           .sendPasswordResetEmail(email: normalizedEmail)
           .timeout(const Duration(seconds: 20));
@@ -100,7 +112,7 @@ class AuthService {
     }
   }
 
-  Future<void> resendVerification() async {
+  Future<void> resendVerification({required String languageCode}) async {
     final user = _auth.currentUser;
     if (user == null) {
       throw FirebaseAuthException(code: 'no-current-user');
@@ -108,6 +120,7 @@ class AuthService {
     await user.reload();
     final refreshed = _auth.currentUser;
     if (refreshed != null && !refreshed.emailVerified) {
+      await _auth.setLanguageCode(normalizeAuthEmailLanguage(languageCode));
       await refreshed
           .sendEmailVerification()
           .timeout(const Duration(seconds: 20));
