@@ -10,9 +10,9 @@ permissions:
   contents: write
 
 jobs:
-  repair-validate-commit:
+  repair-and-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,12 +20,9 @@ jobs:
           ref: feat/lock-screen-prayer-widget
           fetch-depth: 0
 
-      - name: Restore last known-good Nafahat service
+      - name: Restore known-good Nafahat service and apply style
         run: |
           git show ee74d15:android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt > android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
-
-      - name: Apply requested delete target style only
-        run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt')
@@ -37,7 +34,7 @@ jobs:
               'Color.rgb(214, 218, 224)',
           ]
           if not all(x in s for x in required):
-              raise SystemExit('Known-good delete target markers not found')
+              raise SystemExit('Known-good markers not found')
           s = s.replace('setTextColor(Color.WHITE)', 'setTextColor(Color.rgb(70, 70, 70))', 1)
           s = s.replace('Color.argb(191, 145, 35, 45)', 'Color.argb(217, 160, 160, 160)', 1)
           s = s.replace('Color.argb(191, 180, 45, 55)', 'Color.argb(217, 160, 160, 160)', 1)
@@ -45,7 +42,7 @@ jobs:
           p.write_text(s, encoding='utf-8')
           PY
 
-      - name: Validate requested style
+      - name: Validate repaired source
         run: |
           test "$(grep -c 'Color.argb(217, 160, 160, 160)' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt)" -eq 2
           grep -q 'setTextColor(Color.rgb(70, 70, 70))' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
@@ -53,26 +50,6 @@ jobs:
           ! grep -q 'content.title' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
           ! grep -q 'content.body' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
           ! grep -q 'performClick()' android/app/src/main/kotlin/com/example/munib/NafahatBubbleService.kt
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Build Android arm64 release APK
-        env:
-          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4096m
-        run: flutter build apk --release --target-platform android-arm64
 
       - name: Commit repaired source
         run: |
