@@ -53,11 +53,20 @@ jobs:
       - name: Flutter tests
         run: flutter test
 
+      - name: Increase Gradle heap for CI
+        run: |
+          sed -i.bak 's/org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m/' android/gradle.properties
+          sed -i.bak 's/kotlin.daemon.jvm.options=.*/kotlin.daemon.jvm.options=-Xmx1536m/' android/gradle.properties
+
       - name: Build Android debug APK
         run: flutter build apk --debug
 
       - name: Build iOS simulator
         run: flutter build ios --simulator --debug --no-codesign
+
+      - name: Restore CI-only Gradle memory change
+        if: always()
+        run: git checkout -- android/gradle.properties
 
       - name: Commit validated changes
         run: |
