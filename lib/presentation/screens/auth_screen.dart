@@ -79,6 +79,8 @@ class _AuthScreenState extends State<AuthScreen> {
               password,
               _nameController.text.trim(),
               acceptedLegal: acceptedLegal,
+              emailLanguageCode:
+                  Localizations.localeOf(context).languageCode,
             );
 
       if (!mounted || user == null) return;
@@ -129,7 +131,9 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => isLoading = true);
     var sent = false;
     try {
-      await _auth.resendVerification();
+      await _auth.resendVerification(
+        languageCode: Localizations.localeOf(context).languageCode,
+      );
       sent = true;
       if (mounted) _showMessage(context.tr('verificationResent'));
     } on FirebaseAuthException catch (e) {
