@@ -14,6 +14,7 @@ class WidgetService {
     'PrayerWidgetSmall',
     'PrayerWidgetMedium',
     'PrayerWidgetLarge',
+    'PrayerLockWidget',
   ];
 
   static Future<void> savePrayerSchedule(
