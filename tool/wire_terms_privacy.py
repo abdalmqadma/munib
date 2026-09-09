@@ -54,8 +54,8 @@ auth = replace_once(
 )
 auth = replace_once(
     auth,
-    "      _passwordController.clear();\n      _confirmController.clear();\n    });\n  }",
-    "      _passwordController.clear();\n      _confirmController.clear();\n      acceptedLegal = false;\n    });\n  }",
+    "  void _toggleMode() {\n    if (isLoading) return;\n    setState(() {\n      isLogin = !isLogin;\n      _formKey.currentState?.reset();\n      _passwordController.clear();\n      _confirmController.clear();\n    });\n  }",
+    "  void _toggleMode() {\n    if (isLoading) return;\n    setState(() {\n      isLogin = !isLogin;\n      _formKey.currentState?.reset();\n      _passwordController.clear();\n      _confirmController.clear();\n      acceptedLegal = false;\n    });\n  }",
     'toggle reset',
 )
 
