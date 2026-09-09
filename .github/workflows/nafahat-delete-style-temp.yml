@@ -12,7 +12,7 @@ permissions:
 jobs:
   repair-validate-commit:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,11 +69,10 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Compile Android release Kotlin
-        working-directory: android
+      - name: Build Android arm64 release APK
         env:
           GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4096m
-        run: ./gradlew app:compileReleaseKotlin --no-daemon -Pkotlin.compiler.execution.strategy=in-process
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Commit repaired source
         run: |
