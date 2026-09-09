@@ -98,4 +98,9 @@ for required in ["mode === 'verifyEmail'", "mode === 'resetPassword'", '/verify-
     if required not in router:
         raise SystemExit(f'auth action router missing: {required}')
 
+reset_source = reset.read_text()
+for required in ["newPassword: password", "'X-Firebase-Locale':english?'en':'ar'"]:
+    if required not in reset_source:
+        raise SystemExit(f'reset handler contract missing: {required}')
+
 print('Auth email UX wiring and web JavaScript validation passed.')
