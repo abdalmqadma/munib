@@ -13,6 +13,7 @@ import 'core/app_colors.dart';
 import 'core/app_theme.dart';
 import 'data/models/prayer_day.dart';
 import 'data/services/analytics_service.dart';
+import 'data/services/feedback_service.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_navigation_service.dart';
 import 'data/services/push_notification_service.dart';
@@ -32,6 +33,7 @@ void main() async {
   await Hive.initFlutter();
   if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(PrayerDayAdapter());
   await NotificationService.init();
+  await FeedbackService.registerAppLaunch();
 
   try {
     PushNotificationService.registerBackgroundHandler();

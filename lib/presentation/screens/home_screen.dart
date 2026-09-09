@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_strings.dart';
 import '../../data/models/prayer_day.dart';
 import '../../data/services/ai_service.dart';
+import '../../data/services/feedback_service.dart';
 import '../../data/services/location_service.dart';
 import '../../data/services/nafahat_bridge_service.dart';
 import '../providers/prayer_provider.dart';
@@ -45,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _currentIndex = widget.initialIndex.clamp(0, 3);
     _azkarCategory = widget.initialAzkarCategory;
     _pageController = PageController(initialPage: _currentIndex);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _consumeNafahatNavigation());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _handleInitialTasks());
   }
 
   @override
@@ -55,11 +56,90 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _handleInitialTasks() async {
+    await _consumeNafahatNavigation();
+    if (!mounted) return;
+    await _maybeShowFeedbackPrompt();
+  }
+
   Future<void> _consumeNafahatNavigation() async {
     final category = await _nafahatBridge.consumePendingAzkarNavigation();
     if (!mounted || category == null) return;
     setState(() => _azkarCategory = category);
     _goTo(1);
+  }
+
+  Future<void> _maybeShowFeedbackPrompt() async {
+    if (!await FeedbackService.shouldShowPrompt() || !mounted) return;
+
+    await FeedbackService.markPromptShown();
+    if (!mounted) return;
+
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final openForm = await showModalBottomSheet<bool>(
+          context: context,
+          showDragHandle: true,
+          useSafeArea: true,
+          builder: (sheetContext) => Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.rate_review_outlined,
+                  size: 38,
+                  color: Theme.of(sheetContext).colorScheme.primary,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isArabic
+                      ? 'ساعدنا في تحسين التطبيق'
+                      : 'Help us improve the app',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isArabic
+                      ? 'شاركنا رأيك من خلال نموذج منيب.'
+                      : 'Share your feedback through the Munib form.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(sheetContext).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.pop(sheetContext, true),
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: Text(isArabic ? 'فتح النموذج' : 'Open form'),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.pop(sheetContext, false),
+                  child: Text(isArabic ? 'لاحقًا' : 'Later'),
+                ),
+              ],
+            ),
+          ),
+        ) ??
+        false;
+
+    if (!openForm) return;
+    final opened = await FeedbackService.openForm();
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isArabic
+                ? 'تعذر فتح نموذج منيب. حاول مرة أخرى من الإعدادات.'
+                : 'Could not open the Munib form. Try again from Settings.',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -340,8 +420,6 @@ class _HomeContentState extends State<HomeContent> {
             else ...[
               const MunibUltimateWidget(),
               const SizedBox(height: 24),
-              _NextPrayerSummary(provider: provider),
-              const SizedBox(height: 24),
               _PrayerTimesSection(provider: provider),
             ],
           ],
@@ -462,59 +540,6 @@ class _AccountAvatar extends StatelessWidget {
             ? null
             : Icon(Icons.person_rounded, color: foregroundColor),
       );
-}
-
-class _NextPrayerSummary extends StatelessWidget {
-  final PrayerProvider provider;
-  const _NextPrayerSummary({required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: scheme.outline),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.tr('nextPrayer'),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _localizedPrayer(context, provider.nextPrayerName),
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Icon(Icons.schedule_rounded, color: scheme.primary),
-              const SizedBox(height: 6),
-              Text(
-                provider.timeLeftFormatted,
-                textDirection: TextDirection.ltr,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _PrayerTimesSection extends StatefulWidget {
