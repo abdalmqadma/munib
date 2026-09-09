@@ -1,0 +1,58 @@
+name: Munib iOS Lock Widget Temp
+
+on:
+  push:
+    branches: [feat/lock-screen-prayer-widget]
+    paths:
+      - ".github/scripts/patch_ios_lock_widget.py"
+      - ".github/workflows/ios-lock-widget-temp.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/lock-screen-prayer-widget
+          fetch-depth: 0
+
+      - name: Patch iOS lock widget
+        run: python3 .github/scripts/patch_ios_lock_widget.py
+
+      - name: Validate accessory widget source
+        run: |
+          grep -q 'accessoryRectangular' ios/PrayerWidgetExtension/PrayerWidget.swift
+          grep -q 'shortDhikr' ios/PrayerWidgetExtension/PrayerWidget.swift
+          grep -q 'lockScreenView' ios/PrayerWidgetExtension/PrayerWidget.swift
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build iOS simulator
+        run: flutter build ios --simulator --debug --no-codesign
+
+      - name: Commit validated widget change
+        run: |
+          if git diff --quiet -- ios/PrayerWidgetExtension/PrayerWidget.swift; then
+            echo "No widget source change to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ios/PrayerWidgetExtension/PrayerWidget.swift
+          git commit -m "feat: add iOS lock screen prayer widget"
+          git push origin HEAD:feat/lock-screen-prayer-widget
