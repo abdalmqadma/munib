@@ -16,12 +16,28 @@ val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
+
+// Local release builds keep using android/key.properties. CI/CD can provide the
+// same values as environment variables so signing secrets never enter the repo.
+val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
+    ?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("keyAlias")
+val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+    ?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("keyPassword")
+val releaseStoreFile = System.getenv("ANDROID_KEYSTORE_PATH")
+    ?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("storeFile")
+val releaseStorePassword = System.getenv("ANDROID_STORE_PASSWORD")
+    ?.takeIf { it.isNotBlank() }
+    ?: keystoreProperties.getProperty("storePassword")
+
 val hasReleaseSigning = listOf(
-    "keyAlias",
-    "keyPassword",
-    "storeFile",
-    "storePassword",
-).all { !keystoreProperties.getProperty(it).isNullOrBlank() }
+    releaseKeyAlias,
+    releaseKeyPassword,
+    releaseStoreFile,
+    releaseStorePassword,
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.example.munib"
@@ -30,10 +46,10 @@ android {
 
     val releaseSigningConfig = if (hasReleaseSigning) {
         signingConfigs.create("release") {
-            keyAlias = keystoreProperties.getProperty("keyAlias")
-            keyPassword = keystoreProperties.getProperty("keyPassword")
-            storeFile = file(keystoreProperties.getProperty("storeFile"))
-            storePassword = keystoreProperties.getProperty("storePassword")
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+            storeFile = file(releaseStoreFile!!)
+            storePassword = releaseStorePassword
         }
     } else {
         null
