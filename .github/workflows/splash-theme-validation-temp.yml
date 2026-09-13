@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/splash-theme-validation-temp.yml"
       - "lib/presentation/screens/splash_screen.dart"
+      - "lib/core/app_colors.dart"
+      - "lib/core/app_theme.dart"
       - "assets/muneeb_icons/munib_splash_dark.png.b64"
       - "assets/muneeb_icons/munib_splash_light.png.b64"
 
