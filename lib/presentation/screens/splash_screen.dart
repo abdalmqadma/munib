@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/services/auth_service.dart';
@@ -18,10 +22,18 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _controller;
   late final Animation<double> _fadeAnimation;
   late final Animation<double> _scaleAnimation;
+  late final Future<Uint8List> _darkLogoBytes;
+  late final Future<Uint8List> _lightLogoBytes;
 
   @override
   void initState() {
     super.initState();
+    _darkLogoBytes = _loadLogo(
+      'assets/muneeb_icons/munib_splash_dark.png.b64',
+    );
+    _lightLogoBytes = _loadLogo(
+      'assets/muneeb_icons/munib_splash_light.png.b64',
+    );
     _controller = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -35,6 +47,11 @@ class _SplashScreenState extends State<SplashScreen>
     );
     _controller.forward();
     _navigateToNext();
+  }
+
+  Future<Uint8List> _loadLogo(String assetPath) async {
+    final encoded = await rootBundle.loadString(assetPath);
+    return base64Decode(encoded.trim());
   }
 
   Future<void> _navigateToNext() async {
@@ -96,30 +113,36 @@ class _SplashScreenState extends State<SplashScreen>
             child: Semantics(
               image: true,
               label: isArabic ? 'منيب' : 'Munib',
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png',
-                    width: 132,
-                    height: 132,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isArabic ? 'منيب' : 'Munib',
-                    textDirection:
-                        isArabic ? TextDirection.rtl : TextDirection.ltr,
-                    style: theme.textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: isArabic ? 0 : .3,
-                      color: dark
-                          ? theme.colorScheme.onSurface
-                          : theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ],
+              child: SizedBox(
+                width: 256,
+                height: 256,
+                child: FutureBuilder<Uint8List>(
+                  future: dark ? _darkLogoBytes : _lightLogoBytes,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      return Image.memory(
+                        snapshot.data!,
+                        width: 256,
+                        height: 256,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                        gaplessPlayback: true,
+                      );
+                    }
+
+                    if (snapshot.hasError) {
+                      return Image.asset(
+                        'android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png',
+                        width: 132,
+                        height: 132,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      );
+                    }
+
+                    return const SizedBox.shrink();
+                  },
+                ),
               ),
             ),
           ),
