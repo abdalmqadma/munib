@@ -1,11 +1,20 @@
 name: Munib iOS Checks
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "ios/**"
+      - "assets/**"
+      - "pubspec.yaml"
+      - ".github/workflows/ios-check.yml"
   pull_request:
     branches: [main]
     paths:
       - "lib/**"
       - "ios/**"
+      - "assets/**"
       - "pubspec.yaml"
       - ".github/workflows/ios-check.yml"
   workflow_dispatch:
