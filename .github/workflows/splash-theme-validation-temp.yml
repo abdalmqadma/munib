@@ -41,5 +41,11 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Increase Gradle heap for CI validation
+        shell: bash
+        run: |
+          sed -i 's/org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m/' android/gradle.properties
+          sed -i 's/kotlin.daemon.jvm.options=.*/kotlin.daemon.jvm.options=-Xmx1536m/' android/gradle.properties
+
       - name: Build Android debug
         run: flutter build apk --debug
