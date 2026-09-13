@@ -14,6 +14,7 @@ class WidgetService {
     'PrayerWidgetSmall',
     'PrayerWidgetMedium',
     'PrayerWidgetLarge',
+    'PrayerLockWidget',
   ];
 
   static Future<void> savePrayerSchedule(
@@ -74,6 +75,24 @@ class WidgetService {
       await _refreshAll();
     } catch (e) {
       debugPrint('Error saving widget preferences: $e');
+    }
+  }
+
+  static Future<void> saveThemePreference(String preference) async {
+    try {
+      await _preparePlatform();
+      final normalized = switch (preference) {
+        'light' => 'light',
+        'dark' => 'dark',
+        _ => 'system',
+      };
+      await HomeWidget.saveWidgetData<String>(
+        'widget_theme_preference',
+        normalized,
+      );
+      await _refreshAll();
+    } catch (e) {
+      debugPrint('Error saving widget theme preference: $e');
     }
   }
 

@@ -4,11 +4,13 @@ import 'package:provider/provider.dart';
 import '../../core/app_strings.dart';
 import '../../data/models/prayer_day.dart';
 import '../../data/services/ai_service.dart';
+import '../../data/services/feedback_service.dart';
 import '../../data/services/location_service.dart';
 import '../providers/prayer_provider.dart';
 import '../providers/theme_provider.dart';
 import 'imsakia_settings_screen.dart';
 import 'location_imsakia_screen.dart';
+import 'legal_document_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -101,6 +103,75 @@ class SettingsScreen extends StatelessWidget {
                           onTap: () => _showThemeDialog(
                             context,
                             themeProvider,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          title: t(
+                            'ساعدنا في تحسين التطبيق',
+                            'Help us improve the app',
+                          ),
+                          subtitle: t(
+                            'شاركنا رأيك من خلال نموذج منيب',
+                            'Share your feedback through the Munib form',
+                          ),
+                          icon: Icons.rate_review_outlined,
+                          onTap: () async {
+                            final opened = await FeedbackService.openForm();
+                            if (!opened && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    t(
+                                      'تعذر فتح نموذج منيب. حاول مرة أخرى.',
+                                      'Could not open the Munib form. Please try again.',
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _SettingsCard(
+                      children: [
+                        _SettingsTile(
+                          title: t('شروط الاستخدام', 'Terms of Use'),
+                          subtitle: t(
+                            'اقرأ شروط استخدام مُنِيب',
+                            'Read the terms for using Munib',
+                          ),
+                          icon: Icons.description_outlined,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LegalDocumentScreen(
+                                type: LegalDocumentType.terms,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 20, endIndent: 20),
+                        _SettingsTile(
+                          title: t('سياسة الخصوصية', 'Privacy Policy'),
+                          subtitle: t(
+                            'كيف يتعامل مُنِيب مع بياناتك',
+                            'How Munib handles your data',
+                          ),
+                          icon: Icons.privacy_tip_outlined,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LegalDocumentScreen(
+                                type: LegalDocumentType.privacy,
+                              ),
+                            ),
                           ),
                         ),
                       ],

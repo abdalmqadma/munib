@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/services/push_notification_service.dart';
 import '../providers/prayer_provider.dart';
 import 'home_screen.dart';
 
@@ -26,8 +27,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isFirstRun', false);
     if (!mounted) return;
+
+    final pushDestination = PushNotificationService.takeDeferredDestination();
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/home'),
+        builder: (_) => HomeScreen(
+          initialIndex: pushDestination?.homeIndex ?? 0,
+          initialAzkarCategory:
+              pushDestination?.initialAzkarCategory ?? 'Morning',
+        ),
+      ),
     );
   }
 

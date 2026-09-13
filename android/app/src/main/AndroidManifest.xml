@@ -32,9 +32,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="munib" android:host="verified" />
+            </intent-filter>
         </activity>
 
         <meta-data android:name="flutterEmbedding" android:value="2" />
+        <meta-data android:name="google_analytics_automatic_screen_reporting_enabled" android:value="false" />
+        <meta-data android:name="google_analytics_adid_collection_enabled" android:value="false" />
 
         <service
             android:name=".NafahatBubbleService"
@@ -102,6 +110,11 @@
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_large" />
         </receiver>
 
+        <receiver android:name=".PrayerLockWidget" android:exported="true">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_info_lock" />
+        </receiver>
+
         <receiver
             android:name=".PrayerWidgetUpdateReceiver"
             android:enabled="true"
@@ -110,6 +123,17 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
                 <action android:name="com.example.munib.PRAYER_WIDGET_REFRESH" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".PrayerLockWidgetUpdateReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="com.example.munib.PRAYER_LOCK_WIDGET_REFRESH" />
             </intent-filter>
         </receiver>
     </application>

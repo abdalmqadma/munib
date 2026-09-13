@@ -645,14 +645,14 @@ class NafahatBubbleService : Service() {
             text = "×"
             textSize = 32f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(Color.rgb(70, 70, 70))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(
-                    if (dark) Color.argb(191, 145, 35, 45)
-                    else Color.argb(191, 180, 45, 55),
+                    if (dark) Color.argb(217, 160, 160, 160)
+                    else Color.argb(217, 160, 160, 160),
                 )
-                setStroke(dp(2), Color.rgb(214, 218, 224))
+                setStroke(dp(2), Color.rgb(80, 80, 80))
             }
             elevation = 18f
             alpha = 0f

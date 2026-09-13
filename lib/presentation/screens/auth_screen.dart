@@ -3,8 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/app_strings.dart';
+import '../../core/legal_consent.dart';
 import '../../data/services/auth_service.dart';
+import 'email_verification_screen.dart';
+import 'forgot_password_screen.dart';
 import 'home_screen.dart';
+import 'legal_document_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   final bool returnOnSuccess;
@@ -27,6 +31,9 @@ class _AuthScreenState extends State<AuthScreen> {
   bool obscurePassword = true;
   bool awaitingVerification = false;
   String verificationEmail = '';
+  String verificationUid = '';
+  bool verificationInitialMessageJustSent = false;
+  bool acceptedLegal = false;
 
   @override
   void dispose() {
@@ -51,17 +58,29 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _submit() async {
     if (isLoading || !_formKey.currentState!.validate()) return;
+    if (!canSubmitAuthAction(isLogin: isLogin, acceptedLegal: acceptedLegal)) {
+      _showMessage(
+        Localizations.localeOf(context).languageCode == 'ar'
+            ? 'يجب الموافقة على شروط الاستخدام وسياسة الخصوصية قبل إنشاء الحساب.'
+            : 'You must accept the Terms of Use and Privacy Policy before creating an account.',
+      );
+      return;
+    }
     setState(() => isLoading = true);
 
     try {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
+      final wasLogin = isLogin;
       final user = isLogin
           ? await _auth.signInWithEmail(email, password)
           : await _auth.registerWithEmail(
               email,
               password,
               _nameController.text.trim(),
+              acceptedLegal: acceptedLegal,
+              emailLanguageCode:
+                  Localizations.localeOf(context).languageCode,
             );
 
       if (!mounted || user == null) return;
@@ -69,6 +88,8 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_auth.isPasswordUser(user) && !user.emailVerified) {
         setState(() {
           verificationEmail = user.email ?? email;
+          verificationUid = user.uid;
+          verificationInitialMessageJustSent = !wasLogin;
           awaitingVerification = true;
         });
         return;
@@ -105,11 +126,15 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _resendVerification() async {
-    if (isLoading) return;
+  Future<bool> _resendVerification() async {
+    if (isLoading) return false;
     setState(() => isLoading = true);
+    var sent = false;
     try {
-      await _auth.resendVerification();
+      await _auth.resendVerification(
+        languageCode: Localizations.localeOf(context).languageCode,
+      );
+      sent = true;
       if (mounted) _showMessage(context.tr('verificationResent'));
     } on FirebaseAuthException catch (e) {
       if (mounted) _showMessage(_authError(e.code));
@@ -118,6 +143,7 @@ class _AuthScreenState extends State<AuthScreen> {
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
+    return sent;
   }
 
   Future<void> _leaveVerification() async {
@@ -135,6 +161,8 @@ class _AuthScreenState extends State<AuthScreen> {
     if (!mounted) return;
     setState(() {
       awaitingVerification = false;
+      verificationUid = '';
+      verificationInitialMessageJustSent = false;
       isLogin = true;
       _passwordController.clear();
       _confirmController.clear();
@@ -146,7 +174,9 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => isLoading = true);
 
     try {
-      final user = await _auth.signInWithGoogle();
+      final user = await _auth.signInWithGoogle(
+        acceptedLegalForNewAccount: acceptedLegal,
+      );
       if (!mounted) return;
       if (user == null) {
         _showMessage(context.tr('googleCancelled'));
@@ -188,6 +218,10 @@ class _AuthScreenState extends State<AuthScreen> {
         return context.tr('invalidCredentials');
       case 'too-many-requests':
         return context.tr('tooManyRequests');
+      case 'terms-consent-required':
+        return Localizations.localeOf(context).languageCode == 'ar'
+            ? 'لإنشاء حساب جديد، انتقل إلى إنشاء حساب ووافق على شروط الاستخدام وسياسة الخصوصية.'
+            : 'To create a new account, switch to Create account and accept the Terms of Use and Privacy Policy.';
       default:
         return context.tr('authUnexpected');
     }
@@ -206,6 +240,7 @@ class _AuthScreenState extends State<AuthScreen> {
       _formKey.currentState?.reset();
       _passwordController.clear();
       _confirmController.clear();
+      acceptedLegal = false;
     });
   }
 
@@ -215,82 +250,14 @@ class _AuthScreenState extends State<AuthScreen> {
     final scheme = theme.colorScheme;
 
     if (awaitingVerification) {
-      return PopScope<void>(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _leaveVerification();
-        },
-        child: Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            onPressed: isLoading ? null : _leaveVerification,
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
-        ),
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(28),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 480),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 92,
-                      height: 92,
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      child: Icon(
-                        Icons.mark_email_read_outlined,
-                        size: 46,
-                        color: scheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      context.tr('verifyEmailTitle'),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      context
-                          .tr('verifyEmailBody')
-                          .replaceAll('{email}', verificationEmail),
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
-                    ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: isLoading ? null : _checkVerification,
-                        icon: const Icon(Icons.verified_rounded),
-                        label: Text(context.tr('iveVerified')),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: isLoading ? null : _resendVerification,
-                        icon: const Icon(Icons.outgoing_mail),
-                        label: Text(context.tr('resendVerification')),
-                      ),
-                    ),
-                    if (isLoading) ...[
-                      const SizedBox(height: 20),
-                      const CircularProgressIndicator(),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      return EmailVerificationScreen(
+        email: verificationEmail,
+        uid: verificationUid,
+        initialMessageJustSent: verificationInitialMessageJustSent,
+        busy: isLoading,
+        onCheckVerification: _checkVerification,
+        onResendVerification: _resendVerification,
+        onLeaveVerification: _leaveVerification,
       );
     }
 
@@ -420,6 +387,27 @@ class _AuthScreenState extends State<AuthScreen> {
                         return null;
                       },
                     ),
+                    if (isLogin)
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: TextButton(
+                          onPressed: isLoading
+                              ? null
+                              : () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ForgotPasswordScreen(
+                                        initialEmail: _emailController.text,
+                                      ),
+                                    ),
+                                  ),
+                          child: Text(
+                            Localizations.localeOf(context).languageCode == 'ar'
+                                ? 'نسيت كلمة المرور؟'
+                                : 'Forgot password?',
+                          ),
+                        ),
+                      ),
                     if (!isLogin) ...[
                       const SizedBox(height: 16),
                       TextFormField(
@@ -436,11 +424,89 @@ class _AuthScreenState extends State<AuthScreen> {
                             : null,
                       ),
                     ],
+                    if (!isLogin) ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: acceptedLegal,
+                            onChanged: isLoading
+                                ? null
+                                : (value) => setState(
+                                      () => acceptedLegal = value ?? false,
+                                    ),
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text(
+                                    Localizations.localeOf(context).languageCode == 'ar'
+                                        ? 'أوافق على '
+                                        : 'I agree to the ',
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalDocumentScreen(
+                                          type: LegalDocumentType.terms,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      Localizations.localeOf(context).languageCode == 'ar'
+                                          ? 'شروط الاستخدام'
+                                          : 'Terms of Use',
+                                    ),
+                                  ),
+                                  Text(
+                                    Localizations.localeOf(context).languageCode == 'ar'
+                                        ? ' و'
+                                        : ' and the ',
+                                  ),
+                                  TextButton(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const LegalDocumentScreen(
+                                          type: LegalDocumentType.privacy,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      Localizations.localeOf(context).languageCode == 'ar'
+                                          ? 'سياسة الخصوصية'
+                                          : 'Privacy Policy',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 28),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton(
-                        onPressed: isLoading ? null : _submit,
+                        onPressed: isLoading || (!isLogin && !acceptedLegal)
+                            ? null
+                            : _submit,
                         child: isLoading
                             ? const SizedBox(
                                 width: 22,
@@ -458,7 +524,9 @@ class _AuthScreenState extends State<AuthScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: isLoading ? null : _signInWithGoogle,
+                        onPressed: isLoading || (!isLogin && !acceptedLegal)
+                            ? null
+                            : _signInWithGoogle,
                         icon: const Icon(Icons.g_mobiledata_rounded, size: 30),
                         label: Text(context.tr('googleLogin')),
                       ),

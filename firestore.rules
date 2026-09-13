@@ -17,6 +17,7 @@ service cloud.firestore {
     function allowedProfileKeys() {
       return [
         'name',
+        'name_updated_at',
         'email',
         'email_verified',
         'photo_url',
@@ -54,12 +55,36 @@ service cloud.firestore {
               request.resource.data.photo_updated_at is timestamp);
     }
 
+    function nameChanged() {
+      return request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['name']);
+    }
+
+    function nameTimestampChanged() {
+      return request.resource.data.diff(resource.data)
+          .affectedKeys().hasAny(['name_updated_at']);
+    }
+
+    function validNameChangeWindow() {
+      return (!nameChanged() && !nameTimestampChanged())
+          || (nameChanged()
+              && nameTimestampChanged()
+              && ('name_updated_at' in request.resource.data)
+              && request.resource.data.name_updated_at is timestamp
+              && request.resource.data.name_updated_at == request.time
+              && (!('name_updated_at' in resource.data)
+                  || (resource.data.name_updated_at is timestamp
+                      && request.time >= resource.data.name_updated_at
+                          + duration.value(30, 'd'))));
+    }
+
     function validCreate() {
       return request.resource.data.keys().hasOnly(allowedProfileKeys())
           && validIdentityFields()
           && (!('score' in request.resource.data) ||
               request.resource.data.score == 0)
           && (!('name' in request.resource.data) || validName())
+          && !('name_updated_at' in request.resource.data)
           && validPhotoFields();
     }
 
@@ -68,8 +93,8 @@ service cloud.firestore {
           && validIdentityFields()
           && (!request.resource.data.diff(resource.data)
               .affectedKeys().hasAny(['score', 'created_at']))
-          && (!request.resource.data.diff(resource.data)
-              .affectedKeys().hasAny(['name']) || validName())
+          && (!nameChanged() || validName())
+          && validNameChangeWindow()
           && validPhotoFields();
     }
 

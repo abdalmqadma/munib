@@ -34,7 +34,7 @@ class AppTheme {
       primary: AppColors.gold,
       onPrimary: AppColors.backgroundDeep,
       secondary: AppColors.blue,
-      onSecondary: textPrimary,
+      onSecondary: isDark ? textPrimary : Colors.white,
       surface: surface,
       onSurface: textPrimary,
       error: AppColors.red,
@@ -58,6 +58,17 @@ class AppTheme {
       labelLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
       labelMedium: TextStyle(color: textSecondary, fontWeight: FontWeight.w500),
       labelSmall: TextStyle(color: textMuted, fontWeight: FontWeight.w500),
+    );
+
+    final primaryButtonStyle = FilledButton.styleFrom(
+      backgroundColor: AppColors.gold,
+      foregroundColor: AppColors.backgroundDeep,
+      elevation: 0,
+      minimumSize: const Size(48, 52),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
     );
 
     return ThemeData(
@@ -106,6 +117,7 @@ class AppTheme {
           textStyle: const TextStyle(fontWeight: FontWeight.w700),
         ),
       ),
+      filledButtonTheme: FilledButtonThemeData(style: primaryButtonStyle),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: textPrimary,
@@ -134,7 +146,7 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.gold),
+          borderSide: const BorderSide(color: AppColors.gold, width: 1.4),
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(

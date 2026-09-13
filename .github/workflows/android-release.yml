@@ -1,0 +1,176 @@
+name: Munib Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v1.1.0"
+        required: true
+        type: string
+      confirm_publish:
+        description: "Type PUBLISH to confirm the release"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: munib-android-release
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    if: inputs.confirm_publish == 'PUBLISH'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release version
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml | cut -d+ -f1)"
+          RELEASE_TAG="$DISPATCH_TAG"
+
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must look like v1.1.0"
+            exit 1
+          fi
+
+          TAG_VERSION="${RELEASE_TAG#v}"
+          if [[ "$APP_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::pubspec version is $APP_VERSION but release tag is $RELEASE_TAG"
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG already exists"
+            exit 1
+          fi
+
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Test
+        run: flutter test
+
+      - name: Validate Android signing secrets
+        shell: bash
+        run: |
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_STORE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::$name is not configured"
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            exit 1
+          fi
+
+      - name: Prepare release keystore
+        shell: bash
+        run: |
+          KEYSTORE_PATH="$RUNNER_TEMP/munib-upload-keystore.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Configure Gradle memory for release
+        shell: bash
+        run: |
+          if grep -q '^org.gradle.jvmargs=' android/gradle.properties; then
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8/' android/gradle.properties
+          else
+            echo 'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> android/gradle.properties
+          fi
+          if grep -q '^kotlin.daemon.jvm.options=' android/gradle.properties; then
+            sed -i 's/^kotlin.daemon.jvm.options=.*/kotlin.daemon.jvm.options=-Xmx1536m/' android/gradle.properties
+          else
+            echo 'kotlin.daemon.jvm.options=-Xmx1536m' >> android/gradle.properties
+          fi
+
+      - name: Build universal APK
+        run: >-
+          flutter build apk --release
+          --target-platform android-arm,android-arm64,android-x64
+
+      - name: Build ABI-specific APKs
+        run: >-
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm,android-arm64,android-x64
+
+      - name: Build Android App Bundle
+        run: flutter build appbundle --release
+
+      - name: Package release files
+        shell: bash
+        run: |
+          TAG="${{ steps.release.outputs.tag }}"
+          mkdir -p dist
+
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "dist/munib-${TAG}-universal.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            "dist/munib-${TAG}-armeabi-v7a.apk"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            "dist/munib-${TAG}-arm64-v8a.apk"
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk \
+            "dist/munib-${TAG}-x86_64.apk"
+          cp build/app/outputs/bundle/release/app-release.aab \
+            "dist/munib-${TAG}.aab"
+
+          (
+            cd dist
+            sha256sum *.apk *.aab > SHA256SUMS.txt
+          )
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: munib-android-${{ steps.release.outputs.tag }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" dist/* \
+            --target "$GITHUB_SHA" \
+            --title "Munib $RELEASE_TAG" \
+            --generate-notes

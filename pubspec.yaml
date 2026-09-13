@@ -2,7 +2,7 @@ name: munib
 description: "Munib Islamic prayer and adhkar app"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.11.5
@@ -29,9 +29,14 @@ dependencies:
   google_generative_ai: ^0.4.5
   lottie: ^3.1.0
   firebase_core: ^3.1.0
+  firebase_analytics: ^11.6.0
+  firebase_messaging: ^15.2.10
+  firebase_remote_config: ^5.5.0
   firebase_auth: ^5.1.0
   cloud_firestore: ^5.0.1
   google_sign_in: ^6.2.1
+  package_info_plus: ^8.3.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -56,3 +61,4 @@ flutter:
   assets:
     - assets/muneeb_icons/
     - assets/muneeb_icons/store/
+    - android/app/src/main/res/drawable-xxxhdpi/ic_launcher_foreground.png
