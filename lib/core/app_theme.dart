@@ -25,21 +25,26 @@ class AppTheme {
     final border = isDark ? AppColors.border : AppColors.lightBorder;
     final divider = isDark ? AppColors.divider : AppColors.lightDivider;
     final glass = isDark ? AppColors.glass : AppColors.lightGlass;
+    const primary = AppColors.teal;
 
     final scheme = ColorScheme.fromSeed(
-      seedColor: AppColors.gold,
+      seedColor: primary,
       brightness: brightness,
       surface: surface,
     ).copyWith(
-      primary: AppColors.gold,
+      primary: primary,
       onPrimary: AppColors.backgroundDeep,
-      secondary: AppColors.blue,
-      onSecondary: textPrimary,
+      primaryContainer:
+          isDark ? AppColors.tealSoft : AppColors.lightSurfaceSoft,
+      onPrimaryContainer: isDark ? AppColors.tealHighlight : AppColors.blue,
+      secondary: isDark ? AppColors.tealGlow : AppColors.blue,
+      onSecondary: isDark ? AppColors.backgroundDeep : Colors.white,
       surface: surface,
       onSurface: textPrimary,
       error: AppColors.red,
       outline: border,
       outlineVariant: divider,
+      shadow: isDark ? AppColors.tealGlow : const Color(0x260B0D2E),
     );
 
     final textTheme = TextTheme(
@@ -68,7 +73,7 @@ class AppTheme {
       canvasColor: background,
       cardColor: surface,
       dividerColor: divider,
-      splashColor: AppColors.goldSoft,
+      splashColor: AppColors.tealSoft,
       highlightColor: Colors.transparent,
       textTheme: textTheme,
       iconTheme: IconThemeData(color: textSecondary),
@@ -96,9 +101,27 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.gold,
+          backgroundColor: primary,
           foregroundColor: AppColors.backgroundDeep,
-          elevation: 0,
+          shadowColor: isDark
+              ? AppColors.tealGlow.withValues(alpha: .58)
+              : Colors.transparent,
+          elevation: isDark ? 4 : 0,
+          minimumSize: const Size(48, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: AppColors.backgroundDeep,
+          shadowColor: isDark
+              ? AppColors.tealGlow.withValues(alpha: .52)
+              : Colors.transparent,
+          elevation: isDark ? 3 : 0,
           minimumSize: const Size(48, 52),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
@@ -108,16 +131,16 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: textPrimary,
+          foregroundColor: isDark ? AppColors.tealHighlight : AppColors.blue,
           minimumSize: const Size(48, 52),
-          side: BorderSide(color: border),
+          side: BorderSide(color: isDark ? AppColors.teal : border),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: AppColors.gold),
+        style: TextButton.styleFrom(foregroundColor: primary),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -134,14 +157,14 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: AppColors.gold),
+          borderSide: const BorderSide(color: primary, width: 1.5),
         ),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: backgroundDeep,
-        selectedItemColor: AppColors.gold,
+        selectedItemColor: primary,
         unselectedItemColor: textMuted,
-        selectedIconTheme: const IconThemeData(color: AppColors.gold),
+        selectedIconTheme: const IconThemeData(color: primary),
         unselectedIconTheme: IconThemeData(color: textMuted),
         selectedLabelStyle: const TextStyle(
           fontWeight: FontWeight.w600,
@@ -157,7 +180,8 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: backgroundDeep,
-        indicatorColor: AppColors.goldSoft,
+        indicatorColor:
+            isDark ? AppColors.tealSoft : AppColors.lightSurfaceSoft,
         surfaceTintColor: Colors.transparent,
       ),
       dialogTheme: DialogThemeData(
@@ -182,7 +206,7 @@ class AppTheme {
         behavior: SnackBarBehavior.floating,
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.gold,
+        color: primary,
       ),
     );
   }
