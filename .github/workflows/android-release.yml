@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: munib-android-release-${{ github.ref }}
+  group: munib-android-release
   cancel-in-progress: false
 
 jobs:
