@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_strings.dart';
 import '../providers/prayer_provider.dart';
 import 'location_imsakia_screen.dart';
+import 'shiftly_prayer_alarms_screen.dart';
 
 class ImsakiaSettingsScreen extends StatelessWidget {
   const ImsakiaSettingsScreen({super.key});
@@ -25,6 +26,52 @@ class ImsakiaSettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: .08),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: scheme.primary.withValues(alpha: .45)),
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 10,
+              ),
+              leading: const Icon(Icons.chevron_left_rounded),
+              title: Text(
+                _t(
+                  context,
+                  'منبهات الصلاة عبر Shiftly',
+                  'Shiftly prayer alarms',
+                ),
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              subtitle: Text(
+                _t(
+                  context,
+                  'اختَر الصلوات، قبل/بعد الأذان، والبازل ثم زامنها مع Shiftly',
+                  'Choose prayers, timing offset, and wake-up challenge, then sync with Shiftly',
+                ),
+              ),
+              trailing: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.alarm_add_rounded, color: scheme.primary),
+              ),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ShiftlyPrayerAlarmsScreen(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Container(
             decoration: BoxDecoration(
               color: scheme.surface,
