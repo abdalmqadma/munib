@@ -11,6 +11,7 @@ import '../providers/theme_provider.dart';
 import 'imsakia_settings_screen.dart';
 import 'location_imsakia_screen.dart';
 import 'legal_document_screen.dart';
+import 'shiftly_prayer_alarms_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -86,6 +87,25 @@ class SettingsScreen extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const ImsakiaSettingsScreen(),
+                            ),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 20, endIndent: 20),
+                        _SettingsTile(
+                          title: t(
+                            'منبهات الصلاة عبر Shiftly',
+                            'Shiftly prayer alarms',
+                          ),
+                          subtitle: t(
+                            'خصص الصلوات والتوقيت والبازل ثم زامنها مع Shiftly',
+                            'Customize prayers, timing, and challenge, then sync with Shiftly',
+                          ),
+                          icon: Icons.alarm_add_rounded,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const ShiftlyPrayerAlarmsScreen(),
                             ),
                           ),
                         ),
