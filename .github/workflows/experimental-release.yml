@@ -4,18 +4,33 @@ on:
   push:
     branches: [main]
     paths:
+      - "lib/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "website/**"
+      - "firestore.rules"
+      - "firebase.json"
+      - "package.json"
+      - "package-lock.json"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
       - ".github/workflows/experimental-release.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: munib-experimental-release
+  cancel-in-progress: true
+
 jobs:
   build-and-publish-beta:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      RELEASE_TAG: v1.1.0-beta.1
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -24,6 +39,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve beta version
+        id: beta
+        shell: bash
+        run: |
+          APP_VERSION="$(awk '/^version:/ {print $2; exit}' pubspec.yaml | cut -d+ -f1)"
+          RELEASE_TAG="v${APP_VERSION}-beta.${GITHUB_RUN_NUMBER}"
+          echo "version=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "apk=munib-${RELEASE_TAG}-universal.apk" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -68,35 +95,56 @@ jobs:
           chmod 600 "$KEYSTORE_PATH"
           echo "ANDROID_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
 
+      - name: Configure Gradle memory
+        shell: bash
+        run: |
+          if grep -q '^org.gradle.jvmargs=' android/gradle.properties; then
+            sed -i 's/^org.gradle.jvmargs=.*/org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8/' android/gradle.properties
+          else
+            echo 'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8' >> android/gradle.properties
+          fi
+          if grep -q '^kotlin.daemon.jvm.options=' android/gradle.properties; then
+            sed -i 's/^kotlin.daemon.jvm.options=.*/kotlin.daemon.jvm.options=-Xmx1536m/' android/gradle.properties
+          else
+            echo 'kotlin.daemon.jvm.options=-Xmx1536m' >> android/gradle.properties
+          fi
+
       - name: Build universal APK
-        run: flutter build apk --release --target-platform android-arm,android-arm64,android-x64
+        run: >-
+          flutter build apk --release
+          --target-platform android-arm,android-arm64,android-x64
 
       - name: Package APK
         shell: bash
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/munib-v1.1.0-beta.1-universal.apk"
-          cd dist
-          sha256sum *.apk > SHA256SUMS.txt
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/${{ steps.beta.outputs.apk }}"
+          (
+            cd dist
+            sha256sum *.apk > SHA256SUMS.txt
+          )
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: munib-v1.1.0-beta.1
+          name: munib-${{ steps.beta.outputs.tag }}
           path: dist/*
+          if-no-files-found: error
           retention-days: 14
 
       - name: Publish GitHub pre-release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.beta.outputs.tag }}
         shell: bash
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "Release $RELEASE_TAG already exists; skipping creation."
             exit 0
           fi
+
           gh release create "$RELEASE_TAG" dist/* \
             --target "$GITHUB_SHA" \
-            --title "Munib v1.1.0 Beta 1" \
+            --title "Munib $RELEASE_TAG" \
             --prerelease \
-            --notes "نسخة تجريبية من منيب 1.1.0 لاختبار الهوية الكحلية والذهبية، شاشة البداية الجديدة، تحسينات الويدجت، ويدجت شاشة القفل، وتحسينات الحساب والإشعارات قبل الإصدار المستقر."
+            --generate-notes
