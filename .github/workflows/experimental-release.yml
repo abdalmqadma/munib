@@ -50,7 +50,7 @@ jobs:
           RELEASE_TAG="v${APP_VERSION}-beta.${GITHUB_RUN_NUMBER}"
           echo "version=$APP_VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "apk=munib-${RELEASE_TAG}-universal.apk" >> "$GITHUB_OUTPUT"
+          echo "apk=munib-${RELEASE_TAG}-arm64-v8a.apk" >> "$GITHUB_OUTPUT"
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -109,16 +109,16 @@ jobs:
             echo 'kotlin.daemon.jvm.options=-Xmx1536m' >> android/gradle.properties
           fi
 
-      - name: Build universal APK
+      - name: Build ARM64 APK
         run: >-
-          flutter build apk --release
-          --target-platform android-arm,android-arm64,android-x64
+          flutter build apk --release --split-per-abi
+          --target-platform android-arm64
 
       - name: Package APK
         shell: bash
         run: |
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk "dist/${{ steps.beta.outputs.apk }}"
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "dist/${{ steps.beta.outputs.apk }}"
           (
             cd dist
             sha256sum *.apk > SHA256SUMS.txt
@@ -127,7 +127,7 @@ jobs:
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: munib-${{ steps.beta.outputs.tag }}
+          name: munib-${{ steps.beta.outputs.tag }}-arm64
           path: dist/*
           if-no-files-found: error
           retention-days: 14
